@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langchain-agent-lab"
+version = "0.1.0"
+description = "A local, source-grounded LangChain research agent and learning project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "beautifulsoup4>=4.13,<5",
+  "ddgs>=9,<10",
+  "deepagents>=0.3,<1",
+  "httpx>=0.28,<1",
+  "langchain>=1,<2",
+  "langchain-community>=0.4,<1",
+  "langchain-ollama>=1,<2",
+  "langgraph>=1,<2",
+  "langsmith>=0.4,<1",
+  "pydantic>=2.11,<3",
+  "streamlit>=1.47,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1,<2",
+  "pytest-httpx>=0.35,<1",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+agent-learn = "agent_learn.cli:main"
+agent-learn-trace = "agent_learn.trace_demo:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_learn"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+  "live: calls a real local or external service",
+  "hosted_langsmith: sends a fixed synthetic trace to hosted LangSmith",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

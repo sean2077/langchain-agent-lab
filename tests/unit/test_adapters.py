@@ -385,7 +385,7 @@ class SuccessfulReader:
         return Page("Official docs", url, "Supported evidence", datetime.now(UTC))
 
 
-def test_agent_backend_sets_explicit_graph_recursion_limit(
+def test_agent_backend_sets_explicit_graph_execution_limits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observed_configs: list[dict[str, object] | None] = []
@@ -406,7 +406,7 @@ def test_agent_backend_sets_explicit_graph_recursion_limit(
     answer = backend.answer("What is the API?", tools)
 
     assert answer == "Short answer"
-    assert observed_configs == [{"recursion_limit": 100}]
+    assert observed_configs == [{"recursion_limit": 100, "max_concurrency": 1}]
 
 
 @pytest.mark.parametrize(
@@ -435,7 +435,7 @@ def test_agent_backend_repairs_incomplete_citation_coverage_once(
             payload: dict[str, object],
             config: dict[str, object] | None = None,
         ) -> dict[str, object]:
-            assert config == {"recursion_limit": 100}
+            assert config == {"recursion_limit": 100, "max_concurrency": 1}
             agent_invocations.append(payload)
             return {"messages": [AIMessage(content=draft)]}
 
@@ -470,7 +470,7 @@ def test_agent_backend_repairs_language_for_chinese_question(
             payload: dict[str, object],
             config: dict[str, object] | None = None,
         ) -> dict[str, object]:
-            assert config == {"recursion_limit": 100}
+            assert config == {"recursion_limit": 100, "max_concurrency": 1}
             return {"messages": [AIMessage(content="English answer [S1]")]}
 
     class FakeModel:
@@ -504,7 +504,7 @@ def test_normal_agent_and_repair_override_globally_enabled_tracing(
             payload: dict[str, object],
             config: dict[str, object] | None = None,
         ) -> dict[str, object]:
-            assert config == {"recursion_limit": 100}
+            assert config == {"recursion_limit": 100, "max_concurrency": 1}
             observed_states.append(tracing_is_enabled())
             return {"messages": [AIMessage(content="Uncited draft")]}
 
@@ -539,7 +539,7 @@ def test_synthetic_opt_in_sets_tracing_project_and_tag(
             payload: dict[str, object],
             config: dict[str, object] | None = None,
         ) -> dict[str, object]:
-            assert config == {"recursion_limit": 100}
+            assert config == {"recursion_limit": 100, "max_concurrency": 1}
             observed_contexts.append(get_tracing_context())
             return {"messages": [AIMessage(content="Synthetic answer")]}
 

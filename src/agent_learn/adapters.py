@@ -54,6 +54,7 @@ Rules:
 
 _CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 _AGENT_RECURSION_LIMIT = 100
+_AGENT_MAX_CONCURRENCY = 1
 
 
 class DuckDuckGoSearchProvider:
@@ -262,7 +263,10 @@ class LangChainAgentBackend(AgentBackend):
         ):
             result = agent.invoke(
                 {"messages": [{"role": "user", "content": user_content}]},
-                config={"recursion_limit": _AGENT_RECURSION_LIMIT},
+                config={
+                    "recursion_limit": _AGENT_RECURSION_LIMIT,
+                    "max_concurrency": _AGENT_MAX_CONCURRENCY,
+                },
             )
             messages = result.get("messages", [])
             if not messages:

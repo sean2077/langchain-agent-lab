@@ -1,16 +1,17 @@
-# 传输超时、图步骤与总时限
+# 传输超时、图执行与总时限
 
 ## 问题
 
-HTTPX 的 connect/read/write/pool transport timeout、LangGraph recursion limit，与整个
-Agent run 的 wall-clock deadline 有什么区别？
+HTTPX 的 connect/read/write/pool transport timeout、LangGraph recursion/concurrency limit，
+与整个 Agent run 的 wall-clock deadline 有什么区别？
 
 ## 简短答案
 
 Transport timeout 限制一次 HTTP 操作在某个 I/O 阶段最多等待多久；wall-clock deadline
 限制整次 `research(...)` 从开始到结束最多经过多久。前者能防止一个连接阶段永久停住，但
 不会自动约束多次模型调用、工具调用、重定向和修订调用累计起来的总时长。LangGraph
-recursion limit 则限制一次图执行最多经历多少个 super-step，能终止循环，但不计量秒数。
+recursion limit 限制一次图执行的 super-step 深度，`max_concurrency` 限制同一时刻的任务宽度；
+两者都不计量秒数。
 
 ## 四种 transport timeout
 
@@ -54,7 +55,7 @@ transport 的阶段等待，并避免模型 client 继承系统 HTTP proxy。
 模型调用抛出的异常会被研究服务归类为 fail-closed 的 `agent_error`，但这只规定失败结果，
 没有增加总运行 deadline。
 
-### Agent graph super-step
+### Agent graph super-step 与工具并发
 
 [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api#recursion-limit)
 把 `recursion_limit` 定义为一次执行允许的最大 super-step 数；达到上限会抛出
@@ -64,11 +65,22 @@ transport 的阶段等待，并避免模型 client 继承系统 HTTP proxy。
 因此模型若持续在推理节点和工具节点之间循环，最终会抛出异常；`ResearchService` 通过现有的
 Agent 异常边界把它转换成 fail-closed `agent_error`，不会把未完成循环当作来源充分的报告。
 
-这里的 100 是本项目为单题研究选择的结构性放大上限，不是 LangGraph 标准推荐值、生产容量
-测量或服务 SLA。Super-step 也不等于工具调用：一个 step 可以运行一个节点，也可能并行运行
-多个节点。它不能在节点内部取消一个慢 Ollama/HTTP 调用，不能约束同步 DNS 或持续有进展的
-响应体，也不包含主图之后至多一次的格式/语言修订模型调用。因此它补充 transport timeout，
-但不能替代 wall-clock deadline。
+[LangChain ToolNode reference](https://reference.langchain.com/python/langgraph.prebuilt/tool_node/ToolNode)
+说明 ToolNode 管理并行工具执行；[RunnableConfig `max_concurrency`](https://reference.langchain.com/python/langchain-core/runnables/config/RunnableConfig/max_concurrency)
+定义最大并行调用数，缺省时使用 `ThreadPoolExecutor` 默认值。一个 AI message 可以携带多个
+tool call，它们仍只占工具节点所在的一个 super-step，所以 recursion limit 不会限制该 step
+内部的 fan-out 宽度。
+
+本项目的搜索、读取工具共享同一个请求内 `ResearchTools`：它维护候选 URL→source、S# 分配、
+已读证据和 warnings。主图因此同时传入 `max_concurrency=1`，让 ToolNode 保留并执行模型请求的
+全部 tool call，但一次只运行一个。这样 source registry 只有一个工具 mutator，ID 和结果顺序
+不依赖本机 executor 宽度，也避免一条模型消息同时启动许多公网搜索或读取。
+
+这里的 100 与单任务并发都是本项目为单题、状态型工具选择的策略，不是 LangGraph 标准推荐
+值、生产容量测量或服务 SLA。Super-step 不等于工具调用，`max_concurrency=1` 也不限制整次图
+累计多少次调用；DDGS 和 HTTP client 自己启动的内部工作不由该值计数。它们不能在节点内部
+取消一个慢 Ollama/HTTP 调用，不能约束同步 DNS 或持续有进展的响应体，也不包含主图之后至多
+一次的格式/语言修订模型调用。因此它们补充 transport timeout，但不能替代 wall-clock deadline。
 
 ### 页面读取与 DNS
 
@@ -107,25 +119,27 @@ attempt timeout = min(10 秒 transport timeout, 连接尝试剩余预算)
 ### 尚未实现的边界
 
 当前 `ResearchService.research` 外层没有整次运行的 wall-clock deadline。因此 README 和产品
-契约只能声称“部分传输停顿和主图步骤数有界，并能 fail closed”，不能声称“用户一定会在
-300 秒内拿到结果”。
+契约只能声称“部分传输停顿、主图步骤数和任务并发宽度有界，并能 fail closed”，不能声称
+“用户一定会在 300 秒内拿到结果”。
 
-## 三类机制解决不同问题
+## 四类机制解决不同问题
 
 - Transport timeout 回答：“某个 socket/连接池阶段多久没有进展就失败？”
 - Recursion limit 回答：“这次图执行最多允许多少个 super-step？”
+- Concurrency limit 回答：“同一时刻最多允许多少个图任务运行？”
 - Wall-clock deadline 回答：“无论内部做了多少步，这个用户请求最晚何时必须结束？”
 
-这三类边界可以同时存在：transport timeout 应短到能从局部故障中恢复，recursion limit 防止
-图拓扑无限循环，deadline 则约束整次请求的延迟和资源消耗。Deadline 到期时，内部 timeout
-还应被压缩到“剩余预算”，否则外层虽已放弃，底层网络调用仍可能继续占用资源。
+这些边界可以同时存在：transport timeout 应短到能从局部故障中恢复，recursion limit 防止
+图拓扑无限循环，concurrency limit 控制单步 fan-out，deadline 则约束整次请求的延迟和资源
+消耗。Deadline 到期时，内部 timeout 还应被压缩到“剩余预算”，否则外层虽已放弃，底层网络
+调用仍可能继续占用资源。
 
 ## 当前实现与测试入口
 
 - [`config.py`](../../src/agent_learn/config.py)：`OLLAMA_TIMEOUT_SECONDS` 默认值与配置校验。
 - [`bootstrap.py`](../../src/agent_learn/bootstrap.py)：把 timeout 传给 `ChatOllama` client。
-- [`adapters.py`](../../src/agent_learn/adapters.py)：主 Agent graph step limit，以及页面读取器的
-  独立 timeout、重定向和大小边界。
+- [`adapters.py`](../../src/agent_learn/adapters.py)：主 Agent graph step/concurrency limit，以及
+  页面读取器的独立 timeout、重定向和大小边界。
 - [`security.py`](../../src/agent_learn/security.py)：Fake-IP 公共 DNS 查询的独立 timeout。
 - [`test_adapters.py`](../../tests/unit/test_adapters.py)：共享预算、地址回退和重定向的确定性验证。
 - [`test_config.py`](../../tests/unit/test_config.py)：拒绝零、负数、无穷和非数字配置。

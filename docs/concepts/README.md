@@ -7,7 +7,7 @@
 | --- | --- | --- |
 | 搜索候选与已读证据有什么区别？为什么要重新验证最终 URL，并把标题与正文分开？ | 候选只是线索；只有安全读取后的最终页面才是证据，标题元数据也不应挤占正文预算。 | [来源候选、已读证据与最终 URL](source-provenance.md) |
 | Citation identity、coverage 和 semantic support 分别证明什么？ | 前两者验证“引用指向谁、引用有没有覆盖正文”，语义支持才判断“来源是否真的支持陈述”。 | [引用保证的三个层级](citation-assurance.md) |
-| Transport timeout、LangGraph recursion limit 与 wall-clock deadline 有什么区别？ | 它们分别约束 I/O 停顿、图 super-step 数和整次研究经过时间，不能相互冒充。 | [传输超时、图步骤与总时限](transport-timeouts.md) |
+| Transport timeout、图步骤/并发限制与 wall-clock deadline 有什么区别？ | 它们分别约束 I/O 停顿、图深度、单步宽度和整次经过时间，不能相互冒充。 | [传输超时、图执行与总时限](transport-timeouts.md) |
 | 什么时候用直接 edge，什么时候用 conditional edge？ | 后继集合固定时直接连边；必须依据 state 选择路径时使用条件边。 | [LangGraph 的直接边与条件边](langgraph-edges.md) |
 | 为什么正常运行强制关闭 hosted tracing，而 synthetic trace 可以开启？ | 正常请求可能含用户和网页内容，默认不得上传；固定合成 case 是显式、受限的外发实验。 | [Tracing 的隐私与启用边界](tracing-boundary.md) |
 

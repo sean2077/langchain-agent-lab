@@ -36,9 +36,11 @@
 - CLI 在参数解析和 `ResearchRequest` 校验成功后才初始化运行时适配器；help 不依赖运行时
   配置。CLI、eval、synthetic trace 与 Streamlit 只把已分类的配置异常转换为无 traceback 的
   操作员错误；其他构造/执行异常保持可见，避免隐藏程序缺陷。
-- 主 Agent graph 的每次 `invoke` 使用项目拥有的 `recursion_limit=100`；达到上限的异常由
-  研究服务归类为 `agent_error`。该值限制 LangGraph super-step，不代表精确工具调用数、节点
-  时长或整个研究的 wall-clock deadline，且不包含至多一次的图外格式修订模型调用。
+- 主 Agent graph 的每次 `invoke` 使用项目拥有的 `recursion_limit=100` 与
+  `max_concurrency=1`；达到步骤上限的异常由研究服务归类为 `agent_error`。并发配置让同一
+  AI message 的多个 tool call 保持全部执行但串行访问请求内 source registry。它们不代表总
+  工具调用数，不限制工具内部并发、节点时长或整个研究的 wall-clock deadline，且不包含至多
+  一次的图外格式修订模型调用。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成且会被 Streamlit 的
   GFM renderer 激活的链接目标不进入正文。内联/引用链接只保留 label，尖括号 autolink 与
   裸 HTTP(S)、`www.`、email、`mailto:`、`xmpp:` 目标会被移除；默认不启用 HTML rendering，
@@ -69,8 +71,8 @@
   endpoint，并拒绝 URL credentials、query 与 fragment；Ollama client 不继承系统 HTTP
   proxy；`OLLAMA_TIMEOUT_SECONDS` 是正有限值，默认 300 秒，并作为 sync/async client 的
   connect/read/write/pool timeout；它不是 Agent run 的 wall-clock deadline。主 Agent graph
-  显式使用 100-super-step recursion limit，不继承 LangGraph 默认值。tool calling 或 structured
-  output smoke test 失败时停止并重新选型，不静默切云模型。
+  显式使用 100-super-step recursion limit 和单任务 executor concurrency，不继承 LangGraph
+  默认值。tool calling 或 structured output smoke test 失败时停止并重新选型，不静默切云模型。
 - 免费 DuckDuckGo Search；页面读取只允许公网 HTTP(S)，仅按精确主 media type 接受
   `text/html`、`text/plain`、`application/xhtml+xml`，拒绝本机/私网地址与其他内容，并限制
   重定向、超时和响应大小。读取器保留全部已验证地址，以解析结果的首地址族为偏好并保留同族

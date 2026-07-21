@@ -37,7 +37,10 @@ def test_settings_read_environment(monkeypatch) -> None:
 @pytest.mark.parametrize(
     "base_url",
     [
+        "http://localhost",
+        "http://localhost:1",
         "http://localhost:11434",
+        "http://localhost:65535",
         "https://127.0.0.1:11434/ollama",
         "http://[::1]:11434",
     ],
@@ -57,6 +60,7 @@ def test_settings_accept_loopback_ollama_base_url(monkeypatch, base_url: str) ->
         "ftp://localhost:11434",
         "localhost:11434",
         "",
+        "http://localhost:0",
         "http://localhost:99999",
         "http://localhost:11434?mode=remote",
         "http://localhost:11434#remote",

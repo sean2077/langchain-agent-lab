@@ -67,6 +67,38 @@ def test_page_reader_revalidates_redirect_target() -> None:
         reader.read("https://example.com/redirect")
 
 
+def test_page_reader_rejects_zero_port_redirect_before_second_request() -> None:
+    requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "https://example.com:0/final"})
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            text="must not be read",
+        )
+
+    def validator(url: str) -> ValidatedHttpUrl:
+        return validate_public_http_target(
+            url,
+            resolver=lambda _hostname, port, *_: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))
+            ],
+        )
+
+    reader = SafeHttpPageReader(
+        transport=httpx.MockTransport(handler),
+        target_validator=validator,
+    )
+
+    with pytest.raises(UnsafeUrlError, match="port must be between 1 and 65535"):
+        reader.read("https://example.com/start")
+
+    assert requests == ["https://93.184.216.34/start"]
+
+
 def test_page_reader_rejects_non_text_content() -> None:
     transport = httpx.MockTransport(
         lambda request: httpx.Response(

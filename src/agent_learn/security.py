@@ -148,9 +148,16 @@ def validate_public_http_target(
         raise UnsafeUrlError("local hostnames are not allowed")
 
     try:
-        port = parts.port or (443 if parts.scheme.lower() == "https" else 80)
+        explicit_port = parts.port
     except ValueError as exc:
         raise UnsafeUrlError("URL has an invalid port") from exc
+    if explicit_port == 0:
+        raise UnsafeUrlError("URL port must be between 1 and 65535")
+    port = (
+        explicit_port
+        if explicit_port is not None
+        else (443 if parts.scheme.lower() == "https" else 80)
+    )
 
     try:
         literal_address = ipaddress.ip_address(hostname)

@@ -103,6 +103,13 @@ Location: http://127.0.0.1:11434/api/tags
 `target_validator`。校验返回允许连接的公网 IP；读取器固定连接到该 IP，同时保留原域名的
 `Host` 和 TLS SNI，降低 DNS 重绑定风险。
 
+端口也是 endpoint identity 的一部分，不能用普通真值回退选择它。`urlsplit` 对“没有写端口”
+返回 `None`，对显式 `:0` 返回整数 `0`；若写成 `parts.port or 443`，两者都会选择 443，但逻辑
+URL 仍可能保留 `:0`，于是报告声称读取端口 0，transport 实际连接 443。本项目只在端口为
+`None` 时选择 HTTP/HTTPS 默认值；显式端口必须在 1–65,535，端口 0 会在 DNS 和连接前失败。
+同一规则也用于每个重定向目标，因此 `Location: https://public.example:0/final` 不会成为已读
+证据。这证明的是记录身份与所选 endpoint 一致，不是一般性的网络沙箱或 URL canonicalization。
+
 ### 2. 报告必须描述真正读到的资源
 
 搜索结果的标题和 URL 可能只是旧地址、短链接或入口页。证据的 provenance 应回答：

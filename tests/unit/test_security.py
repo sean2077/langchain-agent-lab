@@ -40,6 +40,50 @@ def test_validate_public_http_url_accepts_public_https_url() -> None:
     assert normalized == "https://example.com/research?q=agent"
 
 
+def test_validate_public_http_target_rejects_zero_port_before_dns() -> None:
+    resolver_calls: list[tuple[object, ...]] = []
+
+    def resolver(*args: object) -> list[tuple[object, ...]]:
+        resolver_calls.append(args)
+        return public_resolver()
+
+    with pytest.raises(UnsafeUrlError, match="port must be between 1 and 65535"):
+        validate_public_http_target("https://example.com:0/research", resolver=resolver)
+
+    assert resolver_calls == []
+
+
+@pytest.mark.parametrize(
+    ("url", "expected_port"),
+    [
+        ("http://example.com/research", 80),
+        ("http://example.com:80/research", 80),
+        ("https://example.com/research", 443),
+        ("https://example.com:1/research", 1),
+        ("https://example.com:443/research", 443),
+        ("https://example.com:65535/research", 65535),
+    ],
+)
+def test_validate_public_http_target_preserves_valid_port_boundaries(
+    url: str,
+    expected_port: int,
+) -> None:
+    resolved_ports: list[int] = []
+
+    def resolver(
+        _hostname: str,
+        port: int,
+        *_: object,
+    ) -> list[tuple[object, object, object, object, tuple[str, int]]]:
+        resolved_ports.append(port)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    target = validate_public_http_target(url, resolver=resolver)
+
+    assert target.port == expected_port
+    assert resolved_ports == [expected_port]
+
+
 def test_validate_public_http_url_rejects_hostname_resolving_private_ip() -> None:
     def private_resolver(
         *_: object,

@@ -6,7 +6,8 @@
 
 - 模型在本机 Ollama 运行，默认 `qwen3.5:9b`；`OLLAMA_BASE_URL` 只接受
   `localhost`、IPv4 loopback 或 IPv6 loopback 的 HTTP(S) endpoint，其他目标会在启动时拒绝；
-  Ollama client 不继承系统 HTTP proxy。transport 的 connect/read/write/pool timeout 默认
+  若显式提供端口则必须在 1–65,535，省略时仍使用协议默认端口。Ollama client 不继承系统
+  HTTP proxy。transport 的 connect/read/write/pool timeout 默认
   为 300 秒，可通过正有限值 `OLLAMA_TIMEOUT_SECONDS` 调整；研究主路径把传输超时纳入
   既有 fail-closed，但这不是整个 Agent run 的硬 wall-clock deadline。
 - 主 LangGraph Agent 每次执行显式限制为 100 个 super-step，并设置 `max_concurrency=1`，不继承
@@ -15,7 +16,9 @@
   修订或整个研究耗时。
 - Agent 只能搜索公网和读取已登记的候选，不能把任意 URL 直接交给读取工具。搜索候选与
   已读证据分开保存；报告只列出成功读取的页面，并使用重定向后再次通过公网校验的最终
-  URL、实际页面标题的最多 500 字符前缀和真实读取时间；空标题以最终 URL 的最多 500 字符
+  URL、实际页面标题的最多 500 字符前缀和真实读取时间。公网 URL 的显式端口必须在
+  1–65,535；端口 0 会在 DNS/连接前拒绝，避免记录 URL 与实际连接 endpoint 不一致。空标题
+  以最终 URL 的最多 500 字符
   前缀显示，不会把未读候选伪装成来源。每次 web search 最多把 provider 返回的前 5 条结果
   登记并交给模型，即使 provider 忽略请求的结果上限；所有搜索或预登记
   候选在模型可见 JSON 中的 title 最多 500 字符、snippet 最多 2,000 字符，完整已验证 URL

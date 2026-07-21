@@ -14,7 +14,8 @@
 - `Source` 包含 `source_id`、`title`、`url`、`retrieved_at`，只在页面成功读取且最终 URL
   再次通过公网校验后创建；`title` 是实际页面标题的最多 500 字符前缀，空标题使用最终 URL
   的最多 500 字符前缀，完整 `url` 不截断。其元数据来自实际读取的最终页面，而不是搜索结果
-  或登记时间；直接构造超限 domain value 仍失败。
+  或登记时间；公网 URL 若显式提供端口则只接受 1–65,535，省略端口才使用协议默认值，端口
+  0 在 DNS 或连接前失败。直接构造超限 domain value 仍失败。
 - HTML/XHTML reader 先保存实际页面标题，再从解析树移除 `head` 和 `title` 后生成
   `Page.text` 并执行既有正文字符上限；标题元数据不重复占用正文证据预算。`text/plain`
   行为不变；该结构性分离不构成 semantic main-content extraction 或通用 boilerplate removal。
@@ -68,14 +69,16 @@
 
 - Python 3.12 + uv；LangChain/LangGraph v1 兼容依赖并提交 lockfile。
 - Ollama `qwen3.5:9b` + `ChatOllama`；`OLLAMA_BASE_URL` 只允许 loopback HTTP(S)
-  endpoint，并拒绝 URL credentials、query 与 fragment；Ollama client 不继承系统 HTTP
+  endpoint，并拒绝 URL credentials、query、fragment 与显式端口 0；省略端口使用协议默认值，
+  其他显式端口必须在 1–65,535。Ollama client 不继承系统 HTTP
   proxy；`OLLAMA_TIMEOUT_SECONDS` 是正有限值，默认 300 秒，并作为 sync/async client 的
   connect/read/write/pool timeout；它不是 Agent run 的 wall-clock deadline。主 Agent graph
   显式使用 100-super-step recursion limit 和单任务 executor concurrency，不继承 LangGraph
   默认值。tool calling 或 structured output smoke test 失败时停止并重新选型，不静默切云模型。
 - 免费 DuckDuckGo Search；页面读取只允许公网 HTTP(S)，仅按精确主 media type 接受
   `text/html`、`text/plain`、`application/xhtml+xml`，拒绝本机/私网地址与其他内容，并限制
-  重定向、超时和响应大小。读取器保留全部已验证地址，以解析结果的首地址族为偏好并保留同族
+  重定向、超时和响应大小。显式 URL 端口只接受 1–65,535；省略端口时才选择协议默认值，防止
+  逻辑 URL 与连接端口分叉。读取器保留全部已验证地址，以解析结果的首地址族为偏好并保留同族
   相对顺序，交错 IPv4/IPv6 后顺序尝试；不做并发连接竞速。每次 `read()` 使用默认 30 秒的
   正有限连接尝试预算，由地址回退与重定向共享，并把每次新 HTTPX 请求的 timeout 压缩到
   剩余预算。该策略不硬中断同步 DNS 或持续进展的响应体读取，也不构成整页或 Agent run 的

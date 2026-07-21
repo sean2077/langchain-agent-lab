@@ -6,6 +6,7 @@ import streamlit as st
 
 from agent_learn.bootstrap import build_research_service
 from agent_learn.cli import Researcher
+from agent_learn.config import ConfigurationError
 from agent_learn.domain import ResearchReport, ResearchRequest
 
 _SERVICE_KEY = "_agent_learn_service"
@@ -47,7 +48,12 @@ def run_app() -> None:
 
     service = st.session_state.get(_SERVICE_KEY)
     if service is None:
-        service = _default_service()
+        try:
+            service = _default_service()
+        except ConfigurationError as error:
+            st.error("运行时配置无效，详情如下：")
+            st.code(str(error), language=None, wrap_lines=True)
+            return
         st.session_state[_SERVICE_KEY] = service
 
     history: list[dict[str, object]] = st.session_state.setdefault(_HISTORY_KEY, [])

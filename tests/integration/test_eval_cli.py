@@ -6,6 +6,7 @@ from io import StringIO
 import pytest
 
 import agent_learn.evaluation as evaluation
+from agent_learn.config import ConfigurationError
 from agent_learn.domain import ResearchReport, ResearchRequest, Source
 from agent_learn.evaluation import QUALITY_CASES, QualityCase, run_quality_experiment
 
@@ -124,3 +125,23 @@ def test_eval_entrypoint_keeps_hosted_tracing_disabled(monkeypatch: pytest.Monke
         evaluation.main()
 
     assert exc_info.value.code == 0
+
+
+def test_eval_entrypoint_reports_invalid_runtime_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def build_service(*, trace_enabled: bool) -> PassingService:
+        assert trace_enabled is False
+        raise ConfigurationError("invalid\x1b[2J runtime configuration")
+
+    monkeypatch.setattr(evaluation, "build_research_service", build_service)
+    monkeypatch.setattr(evaluation.sys, "argv", ["agent-learn-eval"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        evaluation.main()
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert captured.out == ""
+    assert captured.err == "error: invalid[2J runtime configuration\n"

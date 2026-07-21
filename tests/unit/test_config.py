@@ -1,6 +1,6 @@
 import pytest
 
-from agent_learn.config import Settings
+from agent_learn.config import ConfigurationError, Settings
 
 
 def test_settings_use_defaults(monkeypatch) -> None:
@@ -65,7 +65,7 @@ def test_settings_accept_loopback_ollama_base_url(monkeypatch, base_url: str) ->
 def test_settings_reject_nonlocal_or_ambiguous_ollama_base_url(monkeypatch, base_url: str) -> None:
     monkeypatch.setenv("OLLAMA_BASE_URL", base_url)
 
-    with pytest.raises(ValueError, match="OLLAMA_BASE_URL"):
+    with pytest.raises(ConfigurationError, match="OLLAMA_BASE_URL"):
         Settings.from_env()
 
 
@@ -76,5 +76,5 @@ def test_settings_reject_nonlocal_or_ambiguous_ollama_base_url(monkeypatch, base
 def test_settings_reject_invalid_ollama_timeout(monkeypatch, timeout: str) -> None:
     monkeypatch.setenv("OLLAMA_TIMEOUT_SECONDS", timeout)
 
-    with pytest.raises(ValueError, match="OLLAMA_TIMEOUT_SECONDS"):
+    with pytest.raises(ConfigurationError, match="OLLAMA_TIMEOUT_SECONDS"):
         Settings.from_env()

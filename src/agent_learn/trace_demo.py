@@ -8,7 +8,8 @@ import sys
 from collections.abc import Sequence
 
 from agent_learn.bootstrap import build_research_service
-from agent_learn.cli import run_cli
+from agent_learn.cli import run_cli, strip_terminal_controls
+from agent_learn.config import ConfigurationError
 
 SYNTHETIC_CASES = {
     "langchain-overview": "What is LangChain v1, according to its official documentation?",
@@ -26,9 +27,14 @@ def run_trace_demo(argv: Sequence[str]) -> int:
     if not os.getenv("LANGSMITH_API_KEY"):
         print("LANGSMITH_API_KEY is required for the synthetic trace demo.", file=sys.stderr)
         return 2
+    try:
+        service = build_research_service(trace_enabled=True)
+    except ConfigurationError as error:
+        sys.stderr.write(strip_terminal_controls(f"error: {error}\n"))
+        return 2
     return run_cli(
         [SYNTHETIC_CASES[args.case]],
-        service=build_research_service(trace_enabled=True),
+        service=service,
         stdout=sys.stdout,
         stderr=sys.stderr,
     )

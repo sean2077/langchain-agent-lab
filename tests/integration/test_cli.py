@@ -6,6 +6,7 @@ import pytest
 
 import agent_learn.cli as cli
 from agent_learn.cli import run_cli
+from agent_learn.config import ConfigurationError
 from agent_learn.domain import ResearchOutcome, ResearchReport, ResearchRequest, Source
 
 
@@ -149,7 +150,7 @@ def test_cli_reports_invalid_runtime_configuration(
 ) -> None:
     def build_service(*, trace_enabled: bool) -> SuccessfulService:
         assert trace_enabled is False
-        raise ValueError("OLLAMA_BASE_URL must target a loopback address")
+        raise ConfigurationError("OLLAMA_BASE_URL must target a loopback address")
 
     monkeypatch.setattr(cli, "build_research_service", build_service)
     stderr = StringIO()
@@ -165,7 +166,7 @@ def test_cli_strips_terminal_controls_from_runtime_configuration_error(
 ) -> None:
     def build_service(*, trace_enabled: bool) -> SuccessfulService:
         assert trace_enabled is False
-        raise ValueError("invalid\x1b[2J runtime configuration")
+        raise ConfigurationError("invalid\x1b[2J runtime configuration")
 
     monkeypatch.setattr(cli, "build_research_service", build_service)
     stderr = StringIO()
@@ -175,6 +176,19 @@ def test_cli_strips_terminal_controls_from_runtime_configuration_error(
     assert exit_code == 2
     assert stderr.getvalue() == "error: invalid[2J runtime configuration\n"
     assert has_terminal_control(stderr.getvalue()) is False
+
+
+def test_cli_does_not_hide_unrelated_builder_value_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def build_service(*, trace_enabled: bool) -> SuccessfulService:
+        assert trace_enabled is False
+        raise ValueError("programming defect")
+
+    monkeypatch.setattr(cli, "build_research_service", build_service)
+
+    with pytest.raises(ValueError, match="programming defect"):
+        run_cli(["question"], stdout=StringIO(), stderr=StringIO())
 
 
 def test_cli_json_serializes_failure_outcome() -> None:

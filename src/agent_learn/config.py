@@ -9,29 +9,33 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 
+class ConfigurationError(ValueError):
+    """A user-actionable runtime configuration error."""
+
+
 def _validate_local_ollama_base_url(value: str) -> str:
     base_url = value.strip()
     try:
         parsed = urlsplit(base_url)
         _ = parsed.port
     except ValueError as exc:
-        raise ValueError("OLLAMA_BASE_URL must be a valid loopback HTTP(S) URL") from exc
+        raise ConfigurationError("OLLAMA_BASE_URL must be a valid loopback HTTP(S) URL") from exc
 
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("OLLAMA_BASE_URL must be a valid loopback HTTP(S) URL")
+        raise ConfigurationError("OLLAMA_BASE_URL must be a valid loopback HTTP(S) URL")
     if parsed.username is not None or parsed.password is not None:
-        raise ValueError("OLLAMA_BASE_URL must not contain credentials")
+        raise ConfigurationError("OLLAMA_BASE_URL must not contain credentials")
     if parsed.query or parsed.fragment:
-        raise ValueError("OLLAMA_BASE_URL must not contain a query string or fragment")
+        raise ConfigurationError("OLLAMA_BASE_URL must not contain a query string or fragment")
 
     hostname = parsed.hostname.rstrip(".").casefold()
     if hostname != "localhost":
         try:
             address = ipaddress.ip_address(hostname)
         except ValueError as exc:
-            raise ValueError("OLLAMA_BASE_URL must target a loopback address") from exc
+            raise ConfigurationError("OLLAMA_BASE_URL must target a loopback address") from exc
         if not address.is_loopback:
-            raise ValueError("OLLAMA_BASE_URL must target a loopback address")
+            raise ConfigurationError("OLLAMA_BASE_URL must target a loopback address")
     return base_url
 
 
@@ -39,9 +43,9 @@ def _validate_ollama_timeout_seconds(value: str) -> float:
     try:
         timeout_seconds = float(value)
     except ValueError as exc:
-        raise ValueError("OLLAMA_TIMEOUT_SECONDS must be a positive finite number") from exc
+        raise ConfigurationError("OLLAMA_TIMEOUT_SECONDS must be a positive finite number") from exc
     if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-        raise ValueError("OLLAMA_TIMEOUT_SECONDS must be a positive finite number")
+        raise ConfigurationError("OLLAMA_TIMEOUT_SECONDS must be a positive finite number")
     return timeout_seconds
 
 

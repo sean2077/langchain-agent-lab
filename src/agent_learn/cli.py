@@ -11,6 +11,7 @@ from typing import Protocol, TextIO
 from pydantic import ValidationError
 
 from agent_learn.bootstrap import build_research_service
+from agent_learn.config import ConfigurationError
 from agent_learn.domain import ResearchReport, ResearchRequest
 
 _TERMINAL_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
@@ -53,7 +54,7 @@ def run_cli(
     if service is None:
         try:
             service = build_research_service(trace_enabled=False)
-        except ValueError as error:
+        except ConfigurationError as error:
             stderr.write(strip_terminal_controls(f"error: {error}\n"))
             return 2
 

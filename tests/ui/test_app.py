@@ -155,3 +155,13 @@ def test_ui_keeps_exception_detail_out_of_markdown_alert() -> None:
     assert all("attacker.example" not in item.value for item in app.error)
     assert all("attacker.example" not in item.value for item in app.markdown)
     assert not app.exception
+
+
+def test_ui_handles_invalid_runtime_configuration(monkeypatch) -> None:
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://model.example.invalid")
+
+    app = AppTest.from_file(APP_PATH).run()
+
+    assert [item.value for item in app.error] == ["运行时配置无效，详情如下："]
+    assert app.code[-1].value == "OLLAMA_BASE_URL must target a loopback address"
+    assert not app.exception

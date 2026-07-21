@@ -20,8 +20,9 @@
   Streamlit 显示未完成/error，并保留答案与详细 warnings。
 - CLI/eval 的 plain stdout/stderr 会剔除 ANSI/C0/C1 terminal controls（保留 tab/newline）；JSON
   将残余控制字符转成标准 `\uXXXX` escape，不修改存储在 `ResearchReport` 中的数据。
-- CLI 在初始化运行时适配器前完成参数解析和问题校验；`--help` 不依赖 Ollama 配置，非法问题
-  或运行时配置返回退出码 2 和简短错误，不输出 traceback。
+- CLI 在初始化运行时适配器前完成参数解析和问题校验；`--help` 不依赖 Ollama 配置。已分类的
+  运行时配置错误在 CLI、eval 与 synthetic trace 返回退出码 2 和简短错误，在 Streamlit
+  显示固定错误与非 Markdown 详情；普通编程异常不会被宽泛捕获并伪装成配置错误。
 - 成功报告必须至少包含一个可引用正文 block，且每个正文段落、列表项和表格数据行都必须
   包含 `[S1]` 形式引用；标题、分隔线和 fenced code block 属于结构性豁免。未知、未成功
   读取或覆盖不完整的来源 id 会导致 fail-closed 报告；该检查证明引用可见且来源已读取，

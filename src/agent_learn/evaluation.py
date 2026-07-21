@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from agent_learn.bootstrap import build_research_service
 from agent_learn.cli import strip_terminal_controls
+from agent_learn.config import ConfigurationError
 from agent_learn.domain import ResearchReport, ResearchRequest
 
 
@@ -171,7 +172,11 @@ def main() -> None:
         description="Run the five-case local quality experiment without hosted tracing"
     )
     parser.parse_args()
-    service = build_research_service(trace_enabled=False)
+    try:
+        service = build_research_service(trace_enabled=False)
+    except ConfigurationError as error:
+        sys.stderr.write(strip_terminal_controls(f"error: {error}\n"))
+        raise SystemExit(2) from None
     raise SystemExit(run_quality_experiment(service=service, stdout=sys.stdout, stderr=sys.stderr))
 
 

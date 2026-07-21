@@ -5,6 +5,8 @@ from agent_learn.research import ResearchService
 from agent_learn.runtime import AgentBackend, Page, PageReader, SearchHit, SearchProvider
 from agent_learn.tools import ResearchTools
 
+_LONG_DIAGNOSTIC = "E" * 1_000_000
+
 
 class FakeSearch(SearchProvider):
     def search(self, query: str, *, max_results: int) -> list[SearchHit]:
@@ -36,6 +38,11 @@ class FailingBackend(AgentBackend):
         raise RuntimeError("model unavailable")
 
 
+class LongFailingBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        raise RuntimeError(_LONG_DIAGNOSTIC)
+
+
 class FakeReader(PageReader):
     def read(self, url: str) -> Page:
         return Page(
@@ -52,6 +59,14 @@ class GroundedBackend(AgentBackend):
         assert '"source_id": "S1"' in search_result
         page = tools.read_source("S1")
         assert "standard agent API" in page
+        return "LangChain v1 的标准入口是 `create_agent`。[S1]"
+
+
+class LongWarningGroundedBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.warnings.append(_LONG_DIAGNOSTIC)
+        tools.search_web("LangChain v1")
+        tools.read_source("S1")
         return "LangChain v1 的标准入口是 `create_agent`。[S1]"
 
 
@@ -238,6 +253,32 @@ def test_research_service_classifies_agent_exception() -> None:
 
     assert report.outcome is ResearchOutcome.AGENT_ERROR
     assert any("model unavailable" in warning for warning in report.warnings)
+
+
+def test_research_service_bounds_agent_exception_warning() -> None:
+    service = ResearchService(
+        FakeSearch(), FakeReader(), LongFailingBackend(), url_validator=lambda url: url
+    )
+
+    report = service.research(ResearchRequest(question="LangChain 是什么？"))
+
+    assert report.outcome is ResearchOutcome.AGENT_ERROR
+    assert len(report.warnings[0]) == 2_000
+    assert report.warnings[0].startswith("agent failed: EEEEE")
+    assert report.warnings[0].endswith("... [truncated]")
+
+
+def test_research_service_bounds_backend_warning_on_success() -> None:
+    service = ResearchService(
+        FakeSearch(), FakeReader(), LongWarningGroundedBackend(), url_validator=lambda url: url
+    )
+
+    report = service.research(ResearchRequest(question="LangChain 是什么？"))
+
+    assert report.outcome is ResearchOutcome.SOURCE_GROUNDED
+    assert len(report.warnings[0]) == 2_000
+    assert report.warnings[0].startswith("EEEEE")
+    assert report.warnings[0].endswith("... [truncated]")
 
 
 def test_research_service_classifies_missing_citations_as_insufficient_evidence() -> None:

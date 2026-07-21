@@ -25,8 +25,10 @@
 - Streamlit 来源链接通过分离的 label/URL 参数渲染，来源 URL 不会拼接进 Markdown 语法；
   远端页面标题进入 GFM-capable label 前会移除活动链接、图片和 autolink 目标，报告中已记录
   的受限 provenance 标题保持不变。
-- Streamlit warning/error 使用固定 alert 文案，并把上游诊断详情作为非 Markdown code text
-  渲染，避免把搜索结果或异常内容解释成活动链接。
+- 每条工具/报告 warning 最多 2,000 字符；超限时保留可操作前缀并以 `... [truncated]`
+  明示截断。工具错误在进入模型可见 JSON 前执行一次，所有 warning 在构造报告前再次执行；
+  这是逐项、依赖返回后的字符边界，不限制 warning 条数、既有异常分配、byte 或 token。
+  Streamlit warning/error 仍使用固定 alert 文案，并把详情作为非 Markdown code text 渲染。
 - `ResearchReport.outcome` 提供稳定的 terminal category；domain 只允许带有效 citations 的
   `source_grounded` 结果，CLI/UI/eval 共享该判断。fail-closed 报告在 CLI 返回非零、在
   Streamlit 显示未完成/error，并保留答案与详细 warnings。

@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from agent_learn.domain import SOURCE_TITLE_MAX_CHARACTERS, Source
+from agent_learn.domain import SOURCE_TITLE_MAX_CHARACTERS, Source, bounded_warning
 from agent_learn.runtime import PageReader, SearchHit, SearchProvider
 from agent_learn.security import UnsafeUrlError, validate_public_http_url
 
@@ -58,14 +58,18 @@ class ResearchTools:
     def read_source_ids(self) -> set[str]:
         return set(self._read_sources_by_id)
 
+    def _record_warning(self, warning: str) -> str:
+        bounded = bounded_warning(warning)
+        self.warnings.append(bounded)
+        return bounded
+
     def search_web(self, query: str) -> str:
         """Search the public web and return source ids, titles, URLs and snippets."""
 
         try:
             hits = self._search_provider.search(query, max_results=self._max_search_results)
         except Exception as exc:  # provider errors become model-visible, fail-closed warnings
-            warning = f"web search failed: {exc}"
-            self.warnings.append(warning)
+            warning = self._record_warning(f"web search failed: {exc}")
             return json.dumps({"error": warning, "sources": []}, ensure_ascii=False)
 
         return self.register_sources(hits[: self._max_search_results])
@@ -78,7 +82,7 @@ class ResearchTools:
             try:
                 url = self._url_validator(hit.url)
             except (UnsafeUrlError, ValueError) as exc:
-                self.warnings.append(f"skipped unsafe search result {hit.url!r}: {exc}")
+                self._record_warning(f"skipped unsafe search result {hit.url!r}: {exc}")
                 continue
 
             source = self._sources_by_url.get(url)
@@ -107,8 +111,7 @@ class ResearchTools:
 
         source = self._sources_by_id.get(source_id)
         if source is None:
-            warning = f"unknown source id: {source_id}"
-            self.warnings.append(warning)
+            warning = self._record_warning(f"unknown source id: {source_id}")
             return json.dumps({"error": warning}, ensure_ascii=False)
 
         try:
@@ -121,8 +124,7 @@ class ResearchTools:
                 retrieved_at=page.retrieved_at,
             )
         except Exception as exc:  # network/parser failures must not crash the agent loop
-            warning = f"failed to read {source_id}: {exc}"
-            self.warnings.append(warning)
+            warning = self._record_warning(f"failed to read {source_id}: {exc}")
             return json.dumps({"error": warning, "source_id": source_id}, ensure_ascii=False)
 
         self._read_sources_by_id[source_id] = read_source

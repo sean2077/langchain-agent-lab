@@ -6,6 +6,8 @@ import pytest
 from agent_learn.runtime import Page, PageReader, SearchHit, SearchProvider
 from agent_learn.tools import ResearchTools
 
+_LONG_DIAGNOSTIC = "E" * 1_000_000
+
 
 class DuplicateSearch(SearchProvider):
     def search(self, query: str, *, max_results: int) -> list[SearchHit]:
@@ -38,6 +40,11 @@ class OverlongFieldSearch(SearchProvider):
         ]
 
 
+class ExplodingSearch(SearchProvider):
+    def search(self, query: str, *, max_results: int) -> list[SearchHit]:
+        raise RuntimeError(_LONG_DIAGNOSTIC)
+
+
 class Reader(PageReader):
     def read(self, url: str) -> Page:
         return Page("Fetched", url, "Readable page text", datetime.now(UTC))
@@ -67,6 +74,11 @@ class MetadataReader(PageReader):
             "Readable page text",
             datetime(2026, 7, 21, 12, 0, tzinfo=UTC),
         )
+
+
+class ExplodingReader(PageReader):
+    def read(self, url: str) -> Page:
+        raise RuntimeError(_LONG_DIAGNOSTIC)
 
 
 def test_search_assigns_stable_ids_and_deduplicates_urls() -> None:
@@ -106,6 +118,33 @@ def test_search_bounds_model_visible_title_and_snippet_fields() -> None:
     assert payload["sources"][1]["title"] == OverlongFieldSearch.long_url[:500]
 
 
+def test_search_bounds_external_error_warning() -> None:
+    tools = ResearchTools(ExplodingSearch(), Reader(), url_validator=lambda url: url)
+
+    payload = json.loads(tools.search_web("query"))
+
+    assert payload["error"] == tools.warnings[0]
+    assert payload["sources"] == []
+    assert len(payload["error"]) == 2_000
+    assert payload["error"].startswith("web search failed: EEEEE")
+    assert payload["error"].endswith("... [truncated]")
+
+
+def test_register_sources_bounds_invalid_candidate_url_warning() -> None:
+    def reject_url(url: str) -> str:
+        raise ValueError("invalid URL")
+
+    tools = ResearchTools(DuplicateSearch(), Reader(), url_validator=reject_url)
+    long_url = "https://example.com/" + "U" * 1_000_000
+
+    payload = json.loads(tools.register_sources([SearchHit("title", long_url, "snippet")]))
+
+    assert payload == {"sources": []}
+    assert len(tools.warnings[0]) == 2_000
+    assert tools.warnings[0].startswith("skipped unsafe search result 'https://example.com/")
+    assert tools.warnings[0].endswith("... [truncated]")
+
+
 def test_register_sources_seeds_candidates_before_web_search() -> None:
     tools = ResearchTools(DuplicateSearch(), Reader(), url_validator=lambda url: url)
 
@@ -138,6 +177,19 @@ def test_read_source_returns_page_without_exposing_new_url_input() -> None:
     assert result["source_id"] == "S1"
     assert result["text"] == "Readable page text"
     assert tools.read_source_ids == {"S1"}
+
+
+def test_read_source_bounds_external_error_warning() -> None:
+    tools = ResearchTools(DuplicateSearch(), ExplodingReader(), url_validator=lambda url: url)
+    tools.search_web("query")
+
+    payload = json.loads(tools.read_source("S1"))
+
+    assert payload["error"] == tools.warnings[0]
+    assert payload["source_id"] == "S1"
+    assert len(payload["error"]) == 2_000
+    assert payload["error"].startswith("failed to read S1: EEEEE")
+    assert payload["error"].endswith("... [truncated]")
 
 
 def test_read_source_records_validated_final_page_as_evidence() -> None:

@@ -24,7 +24,10 @@
 - Streamlit 使用参数化链接组件渲染来源，已验证 URL 不进入 Markdown destination 字符串；
   远端 `Source.title` 进入 GFM-capable label 前移除活动链接、图片与 autolink 目标，若无可见
   标题则使用固定 `Source`。该 sink 编码不修改报告中保存的 provenance 标题或真实来源 URL。
-- Streamlit warning/error 的 severity 文案固定，上游诊断详情只进入非 Markdown code element。
+- 工具返回模型的 error warning 与 `ResearchReport.warnings` 每项最多 2,000 字符；超限值保留
+  最大可容纳前缀并追加 `... [truncated]`。工具生产边界与报告组合边界分别执行，直接构造
+  超限 domain value 失败；短 warning、顺序和 outcome 不变。该策略不限制 warning 数量、
+  dependency 已分配内容、encoded bytes 或 tokens。Streamlit 详情只进入非 Markdown code element。
 - CLI、Streamlit 与 eval 共享 domain outcome：只有 `source_grounded` 才标记成功，且 domain
   强制它包含有效 citations；fail-closed 报告保留答案与 warnings，但 CLI 返回非零、UI 标记
   未完成/error。

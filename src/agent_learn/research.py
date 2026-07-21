@@ -11,6 +11,7 @@ from agent_learn.domain import (
     ResearchReport,
     ResearchRequest,
     Source,
+    bounded_warning,
     extract_citation_ids,
     normalize_citation_markers,
     remove_markdown_link_targets,
@@ -53,7 +54,7 @@ class ResearchService:
 
         answer, removed_link_count = remove_markdown_link_targets(answer)
         answer, normalized_citation_count = normalize_citation_markers(answer)
-        report_warnings = list(tools.warnings)
+        report_warnings = [bounded_warning(warning) for warning in tools.warnings]
         if normalized_citation_count:
             report_warnings.append(
                 f"normalized {normalized_citation_count} citation marker(s) to [S#]"
@@ -126,5 +127,5 @@ class ResearchService:
             answer_markdown=_FAIL_CLOSED_ANSWER,
             outcome=outcome,
             sources=sources,
-            warnings=list(dict.fromkeys(warnings)),
+            warnings=list(dict.fromkeys(bounded_warning(warning) for warning in warnings)),
         )

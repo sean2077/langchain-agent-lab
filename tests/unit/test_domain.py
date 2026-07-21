@@ -283,6 +283,27 @@ def test_fail_closed_report_can_have_no_sources() -> None:
     assert report.is_source_grounded is False
 
 
+def test_report_rejects_warning_over_domain_limit() -> None:
+    with pytest.raises(ValidationError, match="at most 2000 characters"):
+        ResearchReport(
+            answer_markdown="No source-backed answer is available.",
+            outcome=ResearchOutcome.AGENT_ERROR,
+            warnings=["W" * 2_001],
+        )
+
+
+def test_report_accepts_warning_at_domain_limit() -> None:
+    warning = "W" * 2_000
+
+    report = ResearchReport(
+        answer_markdown="No source-backed answer is available.",
+        outcome=ResearchOutcome.AGENT_ERROR,
+        warnings=[warning],
+    )
+
+    assert report.warnings == [warning]
+
+
 def test_report_rejects_source_grounded_outcome_without_citations() -> None:
     with pytest.raises(ValidationError, match="source-grounded outcome requires citations"):
         ResearchReport(answer_markdown="No source-backed answer is available.")

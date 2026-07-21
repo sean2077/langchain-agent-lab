@@ -38,6 +38,32 @@ snippet 最多 2,000 字符；空 title 使用完整已验证 URL 的前 500 字
 成功读取后的 `Source.title` 来自实际页面的受限表示，不会用被截断的搜索标题冒充
 provenance。
 
+### 诊断失败也需要独立的输出边界
+
+“操作已 fail closed”只说明失败不会被冒充成成功，不代表错误详情可以无限增长。搜索 provider
+和页面 reader 的 exception text 会进入模型可见的工具 error JSON；无效搜索候选的原始 URL
+会进入内部 warning；Agent exception 和工具 warnings 最终进入 `ResearchReport`，再由 JSON、
+CLI 或 Streamlit 展示。若这些字符串没有自己的约束，一个安全失败仍可占满模型上下文或让
+操作员输出不可用。
+
+本项目因此把单条 warning 的稳定 domain 上限设为 2,000 字符。超限时保留尽可能长的原始
+前缀，并把最后的空间留给精确标记 `... [truncated]`；上限内的内容完全不变。边界执行两次：
+
+1. `ResearchTools` 在搜索/读取 error JSON 返回模型之前记录受限 warning；
+2. `ResearchService` 在成功或 fail-closed `ResearchReport` 构造前再次适配所有 warning，覆盖
+   Agent exception 和自定义 backend 直接添加诊断的路径。
+
+`ResearchReport` 本身仍是严格契约：直接传入超过 2,000 字符的 warning 会验证失败，而不是在
+domain 内静默修改。这与实际页面标题的 Page→Source 适配遵循相同分工——组合边界处理外部
+变化，稳定 domain 拒绝未适配输入。CLI/eval 之后仍会处理 terminal controls，Streamlit 仍把
+详情放在非 Markdown code element；字符上限没有替代这些 sink-specific 编码。
+
+这是 per-item、provider/exception 已返回后的字符约束。格式化异常时 Python 可能已经持有完整
+字符串；JSON 编码后的 byte 和模型 token 数也不等于字符数。当前没有限制 warning 条数，因此
+“每项大小”和“集合基数”仍是两个不同资源维度。截断后的前缀适合定位常见错误，但不保证保留
+原始详情末尾；若未来确实需要完整 stack 或 payload，应写入另一个受访问控制的本地诊断通道，
+而不是重新放宽模型和用户报告边界。
+
 本项目的状态转换如下：
 
 ```mermaid

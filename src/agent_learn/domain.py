@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -58,6 +59,17 @@ _TABLE_SEPARATOR_PATTERN = re.compile(
 )
 
 SOURCE_TITLE_MAX_CHARACTERS = 500
+WARNING_MAX_CHARACTERS = 2_000
+_WARNING_TRUNCATION_MARKER = "... [truncated]"
+
+
+def bounded_warning(warning: str) -> str:
+    """Keep an actionable warning prefix within the stable domain limit."""
+
+    if len(warning) <= WARNING_MAX_CHARACTERS:
+        return warning
+    prefix_length = WARNING_MAX_CHARACTERS - len(_WARNING_TRUNCATION_MARKER)
+    return warning[:prefix_length] + _WARNING_TRUNCATION_MARKER
 
 
 def extract_citation_ids(markdown: str) -> list[str]:
@@ -474,7 +486,9 @@ class ResearchReport(BaseModel):
     answer_markdown: str = Field(min_length=1)
     outcome: ResearchOutcome = ResearchOutcome.SOURCE_GROUNDED
     sources: list[Source] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[Annotated[str, Field(max_length=WARNING_MAX_CHARACTERS)]] = Field(
+        default_factory=list
+    )
 
     @model_validator(mode="after")
     def validate_source_references(self) -> ResearchReport:

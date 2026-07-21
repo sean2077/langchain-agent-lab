@@ -130,11 +130,13 @@ class SafeHttpPageReader:
                         return urljoin(target.url, location)
 
                     response.raise_for_status()
-                    content_type = response.headers.get("content-type", "").lower()
-                    if not any(
-                        allowed in content_type
-                        for allowed in ("text/html", "text/plain", "application/xhtml+xml")
-                    ):
+                    content_type = response.headers.get("content-type", "")
+                    media_type = content_type.partition(";")[0].strip().lower()
+                    if media_type not in {
+                        "text/html",
+                        "text/plain",
+                        "application/xhtml+xml",
+                    }:
                         raise ValueError(f"unsupported content type: {content_type or 'missing'}")
 
                     body = bytearray()
@@ -145,7 +147,7 @@ class SafeHttpPageReader:
 
                     encoding = response.encoding or "utf-8"
                     html = bytes(body).decode(encoding, errors="replace")
-                    title, text = self._extract_text(html, content_type)
+                    title, text = self._extract_text(html, media_type)
                     return Page(
                         title=title or target.url,
                         url=target.url,
@@ -176,8 +178,8 @@ class SafeHttpPageReader:
         return host if target.port == default_port else f"{host}:{target.port}"
 
     @staticmethod
-    def _extract_text(content: str, content_type: str) -> tuple[str, str]:
-        if "text/plain" in content_type:
+    def _extract_text(content: str, media_type: str) -> tuple[str, str]:
+        if media_type == "text/plain":
             return "", content.strip()
         soup = BeautifulSoup(content, "html.parser")
         title = soup.title.get_text(" ", strip=True) if soup.title else ""

@@ -38,7 +38,9 @@
 - Ollama `qwen3.5:9b` + `ChatOllama`；`OLLAMA_BASE_URL` 只允许 loopback HTTP(S)
   endpoint，并拒绝 URL credentials、query 与 fragment；Ollama client 不继承系统 HTTP
   proxy；tool calling 或 structured output smoke test 失败时停止并重新选型，不静默切云模型。
-- 免费 DuckDuckGo Search；页面读取只允许公网 HTTP(S)，拒绝本机/私网地址与非网页内容，并限制重定向、超时和响应大小。
+- 免费 DuckDuckGo Search；页面读取只允许公网 HTTP(S)，仅按精确主 media type 接受
+  `text/html`、`text/plain`、`application/xhtml+xml`，拒绝本机/私网地址与其他内容，并限制
+  重定向、超时和响应大小。
 - Clash/Mihomo Fake-IP 仅触发公共 DNS 再验证；读取连接固定到验证后的公网 IP 并保留原域名 SNI/Host。
 - Streamlit 本地单用户 UI；不做部署、认证、多用户或远程访问。
 

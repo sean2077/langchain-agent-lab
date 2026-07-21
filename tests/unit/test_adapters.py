@@ -29,7 +29,7 @@ def test_page_reader_extracts_readable_html() -> None:
         assert request.extensions["sni_hostname"] == "example.com"
         return httpx.Response(
             200,
-            headers={"content-type": "text/html; charset=utf-8"},
+            headers={"content-type": "Text/HTML; Charset=UTF-8"},
             text="""
                 <html><head><title>Official docs</title><style>hidden</style></head>
                 <body><nav>menu</nav><main><h1>LangChain</h1><p>Grounded text.</p></main></body>
@@ -75,6 +75,42 @@ def test_page_reader_rejects_non_text_content() -> None:
 
     with pytest.raises(ValueError, match="unsupported content type"):
         reader.read("https://example.com/file.pdf")
+
+
+def test_page_reader_accepts_xhtml_media_type_with_parameter() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "Application/XHTML+XML; Charset=UTF-8"},
+            text="<html><body><main>Readable XHTML</main></body></html>",
+        )
+    )
+    reader = SafeHttpPageReader(transport=transport, target_validator=validated_target)
+
+    page = reader.read("https://example.com/page.xhtml")
+
+    assert page.text == "Readable XHTML"
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "application/octet-stream; profile=text/html",
+        "application/pdf; note=text/plain",
+    ],
+)
+def test_page_reader_rejects_allowed_type_only_in_parameter(content_type: str) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": content_type},
+            content=b"not an approved web media type",
+        )
+    )
+    reader = SafeHttpPageReader(transport=transport, target_validator=validated_target)
+
+    with pytest.raises(ValueError, match="unsupported content type"):
+        reader.read("https://example.com/payload.bin")
 
 
 def test_page_reader_caps_response_size() -> None:

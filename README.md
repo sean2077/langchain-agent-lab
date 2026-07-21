@@ -22,6 +22,8 @@
 - LangChain 生态问题会先登记仓库内核验过的官方入口，但仍须真实读取成功后才能引用。
 - 模型生成的链接目标不会进入正文；常见 citation 格式偏差会规范化，必要时最多做一次无工具修订。
 - Clash/Mihomo Fake-IP 场景使用公共 DNS 再验证并固定到公网 IP，不直接放行 `198.18.0.0/15`。
+- 页面响应只精确允许 `text/html`、`text/plain` 与 `application/xhtml+xml` 主 media type；
+  header 参数中出现这些字符串不会绕过非网页内容拒绝。
 - Streamlit 只监听 `127.0.0.1`，没有认证、多用户和公开部署。
 - 正常 CLI/UI/eval 显式覆盖环境 tracing 开关并强制关闭托管 tracing；只有固定合成 case
   可以启用带 `synthetic` tag 的 LangSmith context。

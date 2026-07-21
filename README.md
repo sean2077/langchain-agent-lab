@@ -81,6 +81,9 @@ uv run --extra dev pytest -m "not live" -q
 uv run --extra dev ruff check .
 ```
 
+[`ci.yml`](.github/workflows/ci.yml) 会在 push 和 pull request 上使用锁定依赖运行相同的
+non-live 测试、lint 与 format check。CI 不运行需要 Ollama、公网或 LangSmith key 的 live 边界。
+
 真实边界测试需要本地 Ollama；LangSmith 测试还需要 `LANGSMITH_API_KEY`：
 
 ```bash

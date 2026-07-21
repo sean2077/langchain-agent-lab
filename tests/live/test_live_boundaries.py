@@ -3,10 +3,9 @@ import os
 import httpx
 import pytest
 from langchain.tools import tool
-from langchain_ollama import ChatOllama
 
 from agent_learn.adapters import DuckDuckGoSearchProvider, SafeHttpPageReader
-from agent_learn.bootstrap import build_research_service
+from agent_learn.bootstrap import build_local_chat_model, build_research_service
 from agent_learn.config import Settings
 from agent_learn.domain import ResearchRequest
 from agent_learn.trace_demo import SYNTHETIC_CASES
@@ -33,7 +32,7 @@ def require_ollama() -> Settings:
 
 
 def test_ollama_model_calls_typed_tool() -> None:
-    settings = require_ollama()
+    require_ollama()
 
     @tool
     def multiply(a: int, b: int) -> int:
@@ -41,12 +40,7 @@ def test_ollama_model_calls_typed_tool() -> None:
 
         return a * b
 
-    model = ChatOllama(
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=0,
-        num_ctx=8_192,
-    ).bind_tools([multiply])
+    model = build_local_chat_model(num_ctx=8_192).bind_tools([multiply])
 
     response = model.invoke("Use the multiply tool to calculate 17 times 23.")
 

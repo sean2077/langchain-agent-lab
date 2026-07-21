@@ -4,7 +4,9 @@
 
 ## 能力边界
 
-- 模型在本机 Ollama 运行，默认 `qwen3.5:9b`。
+- 模型在本机 Ollama 运行，默认 `qwen3.5:9b`；`OLLAMA_BASE_URL` 只接受
+  `localhost`、IPv4 loopback 或 IPv6 loopback 的 HTTP(S) endpoint，其他目标会在启动时拒绝；
+  Ollama client 不继承系统 HTTP proxy。
 - Agent 只能搜索公网和读取已登记的来源，不能把任意 URL 直接交给读取工具。
 - 报告使用 `[S1]` 形式引用；未知或未成功读取的来源 id 会导致 fail-closed 报告。
 - LangChain 生态问题会先登记仓库内核验过的官方入口，但仍须真实读取成功后才能引用。

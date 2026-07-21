@@ -11,15 +11,25 @@ from agent_learn.config import Settings
 from agent_learn.research import ResearchService
 
 
-def build_research_service(*, trace_enabled: bool = False) -> ResearchService:
+def build_local_chat_model(
+    *,
+    num_ctx: int | None = None,
+    num_predict: int | None = None,
+) -> ChatOllama:
     settings = Settings.from_env()
-    model = ChatOllama(
+    return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,
         temperature=0,
-        num_ctx=16_384,
-        num_predict=2_048,
+        num_ctx=num_ctx,
+        num_predict=num_predict,
+        client_kwargs={"trust_env": False},
     )
+
+
+def build_research_service(*, trace_enabled: bool = False) -> ResearchService:
+    settings = Settings.from_env()
+    model = build_local_chat_model(num_ctx=16_384, num_predict=2_048)
     return ResearchService(
         DuckDuckGoSearchProvider(),
         SafeHttpPageReader(),

@@ -2,9 +2,8 @@
 
 from langchain.agents import create_agent
 from langchain.tools import tool
-from langchain_ollama import ChatOllama
 
-from agent_learn.config import Settings
+from agent_learn.bootstrap import build_local_chat_model
 
 
 @tool
@@ -15,12 +14,7 @@ def multiply(a: int, b: int) -> int:
 
 
 def build_langchain_agent():
-    settings = Settings.from_env()
-    model = ChatOllama(
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=0,
-    )
+    model = build_local_chat_model()
     return create_agent(
         model,
         tools=[multiply],

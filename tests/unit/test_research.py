@@ -86,6 +86,20 @@ class LinkedBackend(AgentBackend):
         return "旧功能迁移至 [langchain-classic](file:///tmp/generated-reference.py#L1-L2) [S1]"
 
 
+class BareLinkedBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.search_web("LangChain v1")
+        tools.read_source("S1")
+        return "Read https://attacker.example/escape for details. [S1]"
+
+
+class HiddenReferenceCitationBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.search_web("LangChain v1")
+        tools.read_source("S1")
+        return 'Unsupported shortcut [label].\n\n[label]:\nfile:///tmp/secret "[S1]"'
+
+
 class PartiallyGroundedBackend(AgentBackend):
     def answer(self, question: str, tools: ResearchTools) -> str:
         tools.search_web("LangChain v1")
@@ -250,6 +264,34 @@ def test_research_service_removes_model_generated_link_targets() -> None:
     assert report.answer_markdown == "旧功能迁移至 langchain-classic [S1]"
     assert "file://" not in report.answer_markdown
     assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
+
+
+def test_research_service_removes_model_generated_gfm_autolink() -> None:
+    service = ResearchService(
+        FakeSearch(), FakeReader(), BareLinkedBackend(), url_validator=lambda url: url
+    )
+
+    report = service.research(ResearchRequest(question="Where is the documentation?"))
+
+    assert report.answer_markdown == "Read  for details. [S1]"
+    assert "attacker.example" not in report.answer_markdown
+    assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
+
+
+def test_research_service_fails_closed_on_citation_hidden_in_reference_definition() -> None:
+    service = ResearchService(
+        FakeSearch(),
+        FakeReader(),
+        HiddenReferenceCitationBackend(),
+        url_validator=lambda url: url,
+    )
+
+    report = service.research(ResearchRequest(question="Where is the documentation?"))
+
+    assert report.cited_source_ids == []
+    assert report.outcome is ResearchOutcome.INSUFFICIENT_EVIDENCE
+    assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
+    assert any("no source citations" in warning for warning in report.warnings)
 
 
 def test_research_service_fails_closed_on_uncited_content_block() -> None:

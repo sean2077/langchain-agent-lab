@@ -24,6 +24,36 @@ def make_source(source_id: str = "S1") -> Source:
     )
 
 
+_GFM_ACTIVE_LINK_CASES = (
+    ("Visit <https://attacker.example/path>. [S1]", "Visit . [S1]"),
+    ("Email <help@example.com>. [S1]", "Email . [S1]"),
+    ("Visit https://attacker.example/a(b). [S1]", "Visit . [S1]"),
+    ("Visit www.attacker.example/docs. [S1]", "Visit . [S1]"),
+    ("Email help@example.com. [S1]", "Email . [S1]"),
+    ("Email mailto:help@example.com. [S1]", "Email . [S1]"),
+    ("Chat xmpp:help@example.com/resource. [S1]", "Chat . [S1]"),
+    ("Use [label](https://attacker.example/a((b))). [S1]", "Use label. [S1]"),
+    ("Use [link [nested]](file:///tmp/secret). [S1]", "Use link [nested]. [S1]"),
+    ("Use [link `]` text](file:///tmp/secret). [S1]", "Use link `]` text. [S1]"),
+    (
+        'Use [label](   https://attacker.example/a((b))\n  "title"  ). [S1]',
+        "Use label. [S1]",
+    ),
+    (
+        'Reference [label]. [S1]\n\n[label]:\nfile:///tmp/secret "[S1]"',
+        "Reference [label]. [S1]",
+    ),
+    (
+        'Reference [label]. [S1]\n\n> [label]: file:///tmp/secret "[S1]"',
+        "Reference [label]. [S1]",
+    ),
+    (
+        'Reference [long label]. [S1]\n\n[\nlong label\n]: file:///tmp/secret "[S1]"',
+        "Reference [long label]. [S1]",
+    ),
+)
+
+
 def test_research_request_strips_question() -> None:
     request = ResearchRequest(question="  What is LangChain?  ")
 
@@ -138,6 +168,30 @@ def test_remove_markdown_link_targets_preserves_citation_label() -> None:
     assert count == 1
 
 
+@pytest.mark.parametrize(("markdown", "expected"), _GFM_ACTIVE_LINK_CASES)
+def test_remove_markdown_link_targets_removes_gfm_active_destinations(
+    markdown: str, expected: str
+) -> None:
+    sanitized, count = remove_markdown_link_targets(markdown)
+
+    assert sanitized == expected
+    assert count == 1
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    (
+        "Angle text <not a link>. [S1]",
+        'Escaped HTML <a href="https://attacker.example">label</a>. [S1]',
+    ),
+)
+def test_remove_markdown_link_targets_preserves_inactive_angle_text(markdown: str) -> None:
+    sanitized, count = remove_markdown_link_targets(markdown)
+
+    assert sanitized == markdown
+    assert count == 0
+
+
 def test_report_accepts_known_citations() -> None:
     report = ResearchReport(
         answer_markdown="LangChain v1 uses `create_agent`. [S1]",
@@ -182,6 +236,12 @@ def test_report_rejects_model_generated_markdown_link_target() -> None:
             answer_markdown="Use [create_agent](https://example.com/api). [S1]",
             sources=[make_source()],
         )
+
+
+@pytest.mark.parametrize("markdown", [case[0] for case in _GFM_ACTIVE_LINK_CASES])
+def test_report_rejects_gfm_active_link_target(markdown: str) -> None:
+    with pytest.raises(ValidationError, match="Markdown link targets are not allowed"):
+        ResearchReport(answer_markdown=markdown, sources=[make_source()])
 
 
 def test_report_rejects_noncanonical_citation_marker() -> None:

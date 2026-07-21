@@ -14,9 +14,37 @@ _LOOSE_CITATION_PATTERN = re.compile(r"\[\s*(S[1-9]\d*)\s*\]")
 _BARE_CITATION_PATTERN = re.compile(
     r"(?<![\[\w])S([1-9]\d*)(?![\]\w])(?=\s*(?:[，。；：,.!?、）)'\"”’\n]|\||$))"
 )
-_INLINE_LINK_PATTERN = re.compile(r"(?<!\\)!?\[([^\]\n]*)\]\((?:[^()\n]|\([^()\n]*\))*\)")
 _REFERENCE_LINK_PATTERN = re.compile(r"(?<!\\)!?\[([^\]\n]*)\]\[[^\]\n]*\]")
-_REFERENCE_DEFINITION_PATTERN = re.compile(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[ \t]+\S+[^\n]*$")
+_REFERENCE_CONTAINER_PREFIX = r"[ \t]*(?:(?:>[ \t]*)|(?:(?:[-+*]|\d+[.)])[ \t]+))*"
+_REFERENCE_DEFINITION_PATTERN = re.compile(
+    rf"(?m)^{_REFERENCE_CONTAINER_PREFIX}"
+    r"\[(?:\\[^\r\n]|[^\]\\]){1,999}\]:"
+    rf"(?:[ \t]*\S[^\r\n]*|[ \t]*\r?\n{_REFERENCE_CONTAINER_PREFIX}\S[^\r\n]*)$"
+)
+_ANGLE_URI_AUTOLINK_PATTERN = re.compile(
+    r"(?<!\\)<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\x00-\x20\x7f<>]*>"
+)
+_ANGLE_EMAIL_AUTOLINK_PATTERN = re.compile(
+    r"(?<!\\)<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>"
+)
+_GFM_DOMAIN = r"(?:[A-Za-z0-9_-]+\.)*[A-Za-z0-9-]+\.[A-Za-z0-9-]+"
+_GFM_URL_AUTOLINK_PATTERN = re.compile(
+    rf"(?P<prefix>^|[\s*_~(])(?P<target>(?:https?://|www\.){_GFM_DOMAIN}[^<\s]*)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_GFM_EMAIL = (
+    r"[A-Za-z0-9._+-]+@"
+    r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.[A-Za-z0-9_-]*[A-Za-z0-9]"
+)
+_GFM_PROTOCOL_AUTOLINK_PATTERN = re.compile(
+    rf"(?<![A-Za-z0-9._+-])(?P<target>(?:mailto:{_GFM_EMAIL}|"
+    rf"xmpp:{_GFM_EMAIL}(?:/[A-Za-z0-9@.]*)?))",
+    re.IGNORECASE,
+)
+_GFM_EMAIL_AUTOLINK_PATTERN = re.compile(rf"(?<![A-Za-z0-9._+-]){_GFM_EMAIL}(?![A-Za-z0-9_+-])")
+_LINK_WHITESPACE = " \t\r\n\f\v"
 _HTML_COMMENT_PATTERN = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 _ATX_HEADING_PATTERN = re.compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]+|$)")
 _SETEXT_HEADING_PATTERN = re.compile(r"^[ \t]{0,3}(?:=+|-+)[ \t]*$")
@@ -171,16 +199,236 @@ def normalize_citation_markers(markdown: str) -> tuple[str, int]:
 
 
 def remove_markdown_link_targets(markdown: str) -> tuple[str, int]:
-    """Remove model-controlled Markdown destinations while preserving labels."""
+    """Remove model-controlled Markdown destinations and preserve distinct labels."""
 
-    def label_only(match: re.Match[str]) -> str:
-        label = match.group(1)
-        return f"[{label}]" if _CITATION_LABEL_PATTERN.fullmatch(label) else label
-
-    sanitized, inline_count = _INLINE_LINK_PATTERN.subn(label_only, markdown)
-    sanitized, reference_count = _REFERENCE_LINK_PATTERN.subn(label_only, sanitized)
+    sanitized, inline_count = _remove_inline_link_targets(markdown)
+    sanitized, reference_count = _REFERENCE_LINK_PATTERN.subn(_link_label_only, sanitized)
     sanitized, definition_count = _REFERENCE_DEFINITION_PATTERN.subn("", sanitized)
-    return sanitized.strip(), inline_count + reference_count + definition_count
+    sanitized, angle_uri_count = _ANGLE_URI_AUTOLINK_PATTERN.subn("", sanitized)
+    sanitized, angle_email_count = _ANGLE_EMAIL_AUTOLINK_PATTERN.subn("", sanitized)
+    sanitized, url_count = _GFM_URL_AUTOLINK_PATTERN.subn(_without_extended_autolink, sanitized)
+    sanitized, protocol_count = _GFM_PROTOCOL_AUTOLINK_PATTERN.subn(
+        _without_extended_autolink, sanitized
+    )
+    sanitized, email_count = _GFM_EMAIL_AUTOLINK_PATTERN.subn("", sanitized)
+    removed_count = sum(
+        (
+            inline_count,
+            reference_count,
+            definition_count,
+            angle_uri_count,
+            angle_email_count,
+            url_count,
+            protocol_count,
+            email_count,
+        )
+    )
+    return sanitized.strip(), removed_count
+
+
+def _link_label_only(match: re.Match[str]) -> str:
+    """Keep a link's visible label, retaining canonical citation brackets."""
+
+    return _link_label(match.group(1))
+
+
+def _link_label(label: str) -> str:
+    return f"[{label}]" if _CITATION_LABEL_PATTERN.fullmatch(label) else label
+
+
+def _remove_inline_link_targets(markdown: str) -> tuple[str, int]:
+    """Remove inline destinations using balanced delimiters rather than fixed depth."""
+
+    sanitized = markdown
+    removed_count = 0
+    while True:
+        sanitized, pass_count = _remove_inline_link_targets_once(sanitized)
+        removed_count += pass_count
+        if not pass_count:
+            return sanitized, removed_count
+
+
+def _remove_inline_link_targets_once(markdown: str) -> tuple[str, int]:
+    pieces: list[str] = []
+    output_cursor = 0
+    search_cursor = 0
+    removed_count = 0
+
+    while (label_start := markdown.find("[", search_cursor)) >= 0:
+        if _is_escaped(markdown, label_start):
+            search_cursor = label_start + 1
+            continue
+
+        label_end = _find_link_label_end(markdown, label_start + 1)
+        if label_end is None or label_end + 1 >= len(markdown) or markdown[label_end + 1] != "(":
+            search_cursor = label_start + 1
+            continue
+
+        destination_end = _find_inline_link_end(markdown, label_end + 2)
+        if destination_end is None:
+            search_cursor = label_start + 1
+            continue
+
+        replacement_start = label_start
+        if (
+            label_start > 0
+            and markdown[label_start - 1] == "!"
+            and not _is_escaped(markdown, label_start - 1)
+        ):
+            replacement_start -= 1
+        pieces.append(markdown[output_cursor:replacement_start])
+        pieces.append(_link_label(markdown[label_start + 1 : label_end]))
+        output_cursor = destination_end + 1
+        search_cursor = output_cursor
+        removed_count += 1
+
+    pieces.append(markdown[output_cursor:])
+    return "".join(pieces), removed_count
+
+
+def _is_escaped(markdown: str, index: int) -> bool:
+    backslash_count = 0
+    index -= 1
+    while index >= 0 and markdown[index] == "\\":
+        backslash_count += 1
+        index -= 1
+    return bool(backslash_count % 2)
+
+
+def _find_link_label_end(markdown: str, content_start: int) -> int | None:
+    depth = 1
+    index = content_start
+    while index < len(markdown):
+        character = markdown[index]
+        if character == "\\" and index + 1 < len(markdown):
+            index += 2
+            continue
+        if character == "`":
+            code_span_end = _find_code_span_end(markdown, index)
+            if code_span_end is not None:
+                index = code_span_end
+                continue
+        if character == "[":
+            depth += 1
+        elif character == "]":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _find_code_span_end(markdown: str, opening_start: int) -> int | None:
+    opening_end = opening_start
+    while opening_end < len(markdown) and markdown[opening_end] == "`":
+        opening_end += 1
+    delimiter = markdown[opening_start:opening_end]
+    search_start = opening_end
+    while (closing_start := markdown.find(delimiter, search_start)) >= 0:
+        closing_end = closing_start + len(delimiter)
+        if (closing_start == 0 or markdown[closing_start - 1] != "`") and (
+            closing_end == len(markdown) or markdown[closing_end] != "`"
+        ):
+            return closing_end
+        search_start = closing_end
+    return None
+
+
+def _find_inline_link_end(markdown: str, content_start: int) -> int | None:
+    index = _skip_link_whitespace(markdown, content_start)
+    if index >= len(markdown):
+        return None
+    if markdown[index] == ")":
+        return index
+
+    if markdown[index] == "<":
+        index = _find_angle_destination_end(markdown, index + 1)
+        if index is None:
+            return None
+    else:
+        depth = 0
+        while index < len(markdown):
+            character = markdown[index]
+            if character == "\\" and index + 1 < len(markdown):
+                index += 2
+                continue
+            if character in _LINK_WHITESPACE:
+                if depth:
+                    return None
+                break
+            if ord(character) < 0x20 or character in "\x7f<":
+                return None
+            if character == "(":
+                depth += 1
+            elif character == ")":
+                if depth == 0:
+                    return index
+                depth -= 1
+            index += 1
+        if depth:
+            return None
+
+    whitespace_start = index
+    index = _skip_link_whitespace(markdown, index)
+    if index >= len(markdown):
+        return None
+    if markdown[index] == ")":
+        return index
+    if index == whitespace_start or markdown[index] not in "\"'(":
+        return None
+
+    title_closer = {'"': '"', "'": "'", "(": ")"}[markdown[index]]
+    index += 1
+    while index < len(markdown):
+        character = markdown[index]
+        if character == "\\" and index + 1 < len(markdown):
+            index += 2
+            continue
+        if character == title_closer:
+            index = _skip_link_whitespace(markdown, index + 1)
+            return index if index < len(markdown) and markdown[index] == ")" else None
+        index += 1
+    return None
+
+
+def _skip_link_whitespace(markdown: str, index: int) -> int:
+    while index < len(markdown) and markdown[index] in _LINK_WHITESPACE:
+        index += 1
+    return index
+
+
+def _find_angle_destination_end(markdown: str, index: int) -> int | None:
+    while index < len(markdown):
+        character = markdown[index]
+        if character in "\r\n<":
+            return None
+        if character == "\\" and index + 1 < len(markdown):
+            index += 2
+            continue
+        if character == ">":
+            return index + 1
+        index += 1
+    return None
+
+
+def _without_extended_autolink(match: re.Match[str]) -> str:
+    prefix = match.groupdict().get("prefix", "")
+    target = match.group("target")
+    suffix_start = len(target)
+
+    while suffix_start and target[suffix_start - 1] in "?!.,:*_~":
+        suffix_start -= 1
+    while (
+        suffix_start
+        and target[suffix_start - 1] == ")"
+        and target[:suffix_start].count(")") > target[:suffix_start].count("(")
+    ):
+        suffix_start -= 1
+
+    entity = re.search(r"&[A-Za-z0-9]+;$", target[:suffix_start])
+    if entity:
+        suffix_start = entity.start()
+    return prefix + target[suffix_start:]
 
 
 class ResearchRequest(BaseModel):

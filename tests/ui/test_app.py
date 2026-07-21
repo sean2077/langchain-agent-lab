@@ -31,6 +31,12 @@ class WarningService:
         )
 
 
+class GroundedWarningService(SuccessfulService):
+    def research(self, request: ResearchRequest) -> ResearchReport:
+        report = super().research(request)
+        return report.model_copy(update={"warnings": ["Citation marker normalized"]})
+
+
 class MarkdownInjectionService:
     source_url = "https://example.com/) [Injected](https://attacker.example"
 
@@ -65,6 +71,8 @@ def test_ui_renders_report_and_source() -> None:
     assert len(links) == 1
     assert links[0].label == "[S1] Official docs"
     assert links[0].url == "https://example.com/docs"
+    assert app.status[0].label == "研究完成"
+    assert app.status[0].state == "complete"
     assert not app.exception
 
 
@@ -73,8 +81,21 @@ def test_ui_renders_fail_closed_warning() -> None:
 
     app.chat_input[0].set_value("LangChain").run()
 
+    assert app.status[0].label == "研究未完成"
+    assert app.status[0].state == "error"
     assert any("Search failed" in warning.value for warning in app.warning)
     assert any("无法生成有来源支持的研究报告" in item.value for item in app.markdown)
+    assert not app.exception
+
+
+def test_ui_does_not_treat_warning_alone_as_failure() -> None:
+    app = build_app(GroundedWarningService())
+
+    app.chat_input[0].set_value("LangChain").run()
+
+    assert app.status[0].label == "研究完成"
+    assert app.status[0].state == "complete"
+    assert any("Citation marker normalized" in warning.value for warning in app.warning)
     assert not app.exception
 
 

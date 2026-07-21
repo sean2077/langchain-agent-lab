@@ -70,7 +70,10 @@ def run_app() -> None:
                 status.update(label="研究失败", state="error")
                 st.error(f"研究流程失败：{exc}")
                 return
-            status.update(label="研究完成", state="complete", expanded=False)
+            if report.cited_source_ids:
+                status.update(label="研究完成", state="complete", expanded=False)
+            else:
+                status.update(label="研究未完成", state="error", expanded=False)
         _render_report(report)
 
     history.append(

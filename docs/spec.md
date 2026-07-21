@@ -31,8 +31,9 @@
   也不限制独立预登记的核验后官方候选。
 - 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
   data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性
-  豁免。该确定性规则验证 citation coverage 与 source identity，不声称验证引用内容在语义上
-  支持对应陈述。
+  豁免。闭合或延伸到文末的 HTML comment 不可见，其中的标记不参与 citation identity 或
+  coverage。该确定性规则验证 citation coverage 与 source identity，不声称验证引用内容在
+  语义上支持对应陈述。
 - 核心生态问题优先登记核验过的官方入口，但目录登记不等于可信引用，仍须通过相同公网读取边界。
 - 本地质量实验使用 5 个固定、非敏感 case；code evaluator 只验证成功报告契约和指定第一方
   来源确实被引用；页面 identity 精确包含 scheme、host、path 与 query，忽略 fragment，且不

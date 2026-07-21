@@ -40,6 +40,25 @@ def test_extract_citation_ids_preserves_first_seen_order() -> None:
     assert extract_citation_ids("One [S2], two [S1], repeat [S2].") == ["S2", "S1"]
 
 
+@pytest.mark.parametrize("comment", ["<!-- [S1] -->", "<!-- [S1]"])
+def test_html_comments_cannot_supply_visible_citations(comment: str) -> None:
+    markdown = f"Unsupported claim.\n{comment}"
+
+    assert extract_citation_ids(markdown) == []
+    assert count_uncited_content_blocks(markdown) == 1
+    with pytest.raises(ValidationError, match="source-grounded outcome requires citations"):
+        ResearchReport(answer_markdown=markdown, sources=[make_source()])
+
+
+def test_closed_html_comment_preserves_following_visible_citation() -> None:
+    markdown = "Supported claim. <!-- [S2] --> [S1]"
+
+    report = ResearchReport(answer_markdown=markdown, sources=[make_source()])
+
+    assert report.cited_source_ids == ["S1"]
+    assert count_uncited_content_blocks(markdown) == 0
+
+
 def test_count_uncited_content_blocks_checks_prose_and_list_items() -> None:
     markdown = """# Summary
 

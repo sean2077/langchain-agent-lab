@@ -17,6 +17,7 @@ _BARE_CITATION_PATTERN = re.compile(
 _INLINE_LINK_PATTERN = re.compile(r"(?<!\\)!?\[([^\]\n]*)\]\((?:[^()\n]|\([^()\n]*\))*\)")
 _REFERENCE_LINK_PATTERN = re.compile(r"(?<!\\)!?\[([^\]\n]*)\]\[[^\]\n]*\]")
 _REFERENCE_DEFINITION_PATTERN = re.compile(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[ \t]+\S+[^\n]*$")
+_HTML_COMMENT_PATTERN = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
 _ATX_HEADING_PATTERN = re.compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]+|$)")
 _SETEXT_HEADING_PATTERN = re.compile(r"^[ \t]{0,3}(?:=+|-+)[ \t]*$")
 _THEMATIC_BREAK_PATTERN = re.compile(
@@ -30,9 +31,15 @@ _TABLE_SEPARATOR_PATTERN = re.compile(
 
 
 def extract_citation_ids(markdown: str) -> list[str]:
-    """Return unique citation ids in first-seen order."""
+    """Return unique visible citation ids in first-seen order."""
 
-    return list(dict.fromkeys(_CITATION_PATTERN.findall(markdown)))
+    return list(dict.fromkeys(_CITATION_PATTERN.findall(_without_html_comments(markdown))))
+
+
+def _without_html_comments(markdown: str) -> str:
+    """Exclude non-rendered comments, including an unclosed comment through EOF."""
+
+    return _HTML_COMMENT_PATTERN.sub("", markdown)
 
 
 def count_uncited_content_blocks(markdown: str) -> int:
@@ -53,7 +60,7 @@ def has_citable_content(markdown: str) -> bool:
 
 
 def _citation_content_blocks(markdown: str) -> list[str]:
-    lines = markdown.splitlines()
+    lines = _without_html_comments(markdown).splitlines()
     blocks: list[str] = []
     current: list[str] = []
     current_is_list_item = False

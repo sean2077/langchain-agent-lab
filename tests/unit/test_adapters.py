@@ -172,6 +172,8 @@ class SuccessfulReader:
         "Uncited draft",
         "Unsupported claim.\n\nSupported claim. [S1]",
         "# Structural citation [S1]\n\n```text\n[S1]\n```",
+        "Unsupported claim.\n<!-- [S1] -->",
+        "Unsupported claim.\n<!-- [S1]",
     ],
 )
 def test_agent_backend_repairs_incomplete_citation_coverage_once(

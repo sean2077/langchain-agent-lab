@@ -42,6 +42,10 @@ Citation identity、citation coverage 和 semantic support 分别证明什么？
 标题、分隔线和 fenced code block 是结构性内容，因此豁免。成功报告必须至少存在一个可引用
 正文 block；只把 `[S1]` 放进标题或代码块也不能通过。
 
+HTML comment 不会渲染为读者可见内容，因此其中的 `[S1]` 也不能提供 identity 或 coverage。
+闭合 comment 与从 `<!--` 延伸到文末的未闭合 comment 都从 citation 分析中排除；否则一段
+没有可见标记的正文会被误判为已有来源。
+
 Coverage 的检查单位是 Markdown 结构，不会解析一句话中包含几个独立事实。例如：
 
 ```markdown

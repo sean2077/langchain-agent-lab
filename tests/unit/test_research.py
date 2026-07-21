@@ -93,6 +93,13 @@ class PartiallyGroundedBackend(AgentBackend):
         return "LangChain 适合所有生产工作负载。\n\nLangChain v1 的标准入口是 `create_agent`。[S1]"
 
 
+class HiddenCitationBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.search_web("LangChain v1")
+        tools.read_source("S1")
+        return "LangChain v1 uses create_agent.\n<!-- [S1] -->"
+
+
 class CandidateSearch(SearchProvider):
     def search(self, query: str, *, max_results: int) -> list[SearchHit]:
         return [
@@ -255,3 +262,15 @@ def test_research_service_fails_closed_on_uncited_content_block() -> None:
     assert report.cited_source_ids == []
     assert report.outcome is ResearchOutcome.INVALID_REPORT
     assert any("uncited content block" in warning for warning in report.warnings)
+
+
+def test_research_service_fails_closed_on_citation_hidden_in_html_comment() -> None:
+    service = ResearchService(
+        FakeSearch(), FakeReader(), HiddenCitationBackend(), url_validator=lambda url: url
+    )
+
+    report = service.research(ResearchRequest(question="What is LangChain?"))
+
+    assert report.cited_source_ids == []
+    assert report.outcome is ResearchOutcome.INSUFFICIENT_EVIDENCE
+    assert any("no source citations" in warning for warning in report.warnings)

@@ -1,6 +1,7 @@
 # 成果驱动学习路线
 
 默认节奏为 4 周、每周 5–7 小时。课程是参考材料；是否进入下一阶段由产出决定。
+五个容易混淆的实现边界及详细答案集中在[概念与边界问题](concepts/README.md)。
 
 ## 阶段 1：LangChain v1 与 CLI
 
@@ -10,22 +11,25 @@
 
 ## 阶段 2：LangGraph、LangSmith 与 Deep Agents
 
-- 运行 `examples/langgraph_workflow.py`，观察 interrupt 前后的 checkpoint state。
+- 调用 `examples.langgraph_workflow.run_interrupt_demo(approved=True/False)`，观察 checkpoint state
+  与两个 terminal status。
 - 学习 [LangGraph Essentials](https://academy.langchain.com/courses/langgraph-essentials-python)。
 - 运行固定合成 case 的 `agent-learn-trace`，在 LangSmith 中解释模型、工具和终止节点。
 - 运行 `examples/deep_agent.py`，对比普通 `create_agent` 与 Agent harness。
 
 ## 阶段 3：只读资料研究核心
 
-- 理解 Source registry、`[S1]` 引用契约和 fail-closed 行为。
+- 理解搜索候选与已读证据的 provenance 边界、`[S1]` identity/coverage 引用契约、语义支持
+  边界和 fail-closed 行为。
 - 运行单元测试，分别让搜索、页面读取、模型与引用校验失败一次。
 - 用 CLI 完成三个非敏感问题，并检查来源是否支持正文。
 
 ## 阶段 4：本地 Web UI 与 5 题验收
 
 - 在 `127.0.0.1` 启动 Streamlit。
-- 提交 5 个真实但非敏感的问题；来源均可打开、关键事实有引用。
-- 至少 4 份报告达到“无需重新研究即可直接使用”。
+- 运行 `uv run agent-learn-eval`，理解固定 dataset、code evaluator 与一次 experiment 的边界。
+- 确认 5 题自动结构门全部通过；自动结果不等同于引用对陈述的语义支持。
+- 按 `docs/quality-gate.md` 人工核对语义支持，至少 4 份报告达到“无需重新研究即可直接使用”。
 
 ## 三个场景选型题
 

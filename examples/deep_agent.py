@@ -2,9 +2,8 @@
 
 from deepagents import create_deep_agent
 from langchain.tools import tool
-from langchain_ollama import ChatOllama
 
-from agent_learn.config import Settings
+from agent_learn.bootstrap import build_local_chat_model
 
 
 @tool
@@ -19,12 +18,7 @@ def glossary_lookup(term: str) -> str:
 
 
 def build_deep_agent():
-    settings = Settings.from_env()
-    model = ChatOllama(
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=0,
-    )
+    model = build_local_chat_model()
     return create_deep_agent(
         model=model,
         tools=[glossary_lookup],

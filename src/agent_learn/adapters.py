@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import ipaddress
+import math
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from time import monotonic
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
@@ -19,7 +21,9 @@ from langsmith import tracing_context
 
 from agent_learn.catalog import official_sources_for
 from agent_learn.domain import (
+    count_uncited_content_blocks,
     extract_citation_ids,
+    has_citable_content,
     normalize_citation_markers,
     remove_markdown_link_targets,
 )
@@ -49,6 +53,8 @@ Rules:
 """
 
 _CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+_AGENT_RECURSION_LIMIT = 100
+_AGENT_MAX_CONCURRENCY = 1
 
 
 class DuckDuckGoSearchProvider:
@@ -70,20 +76,27 @@ class SafeHttpPageReader:
         self,
         *,
         timeout_seconds: float = 10.0,
+        connection_budget_seconds: float = 30.0,
         max_bytes: int = 2_000_000,
         max_characters: int = 20_000,
         max_redirects: int = 3,
         transport: httpx.BaseTransport | None = None,
         target_validator: Callable[[str], ValidatedHttpUrl] = validate_public_http_target,
+        clock: Callable[[], float] = monotonic,
     ) -> None:
+        if not math.isfinite(connection_budget_seconds) or connection_budget_seconds <= 0:
+            raise ValueError("connection_budget_seconds must be positive and finite")
         self._timeout = timeout_seconds
+        self._connection_budget = connection_budget_seconds
         self._max_bytes = max_bytes
         self._max_characters = max_characters
         self._max_redirects = max_redirects
         self._transport = transport
         self._target_validator = target_validator
+        self._clock = clock
 
     def read(self, url: str) -> Page:
+        connection_deadline = self._clock() + self._connection_budget
         current_url = url
         headers = {"User-Agent": "agent-learn/0.1 (+local research assistant)"}
         with httpx.Client(
@@ -95,7 +108,7 @@ class SafeHttpPageReader:
         ) as client:
             for redirect_count in range(self._max_redirects + 1):
                 target = self._target_validator(current_url)
-                result = self._fetch_target(client, target)
+                result = self._fetch_target(client, target, connection_deadline)
                 if isinstance(result, Page):
                     return result
                 if redirect_count >= self._max_redirects:
@@ -104,9 +117,15 @@ class SafeHttpPageReader:
 
         raise ValueError("page could not be fetched")
 
-    def _fetch_target(self, client: httpx.Client, target: ValidatedHttpUrl) -> Page | str:
+    def _fetch_target(
+        self,
+        client: httpx.Client,
+        target: ValidatedHttpUrl,
+        connection_deadline: float,
+    ) -> Page | str:
         last_connection_error: httpx.HTTPError | None = None
         for address in target.addresses:
+            attempt_timeout = self._remaining_connection_timeout(connection_deadline)
             request_url = self._pinned_url(target, address)
             request_headers = {"Host": self._host_header(target)}
             extensions = (
@@ -120,6 +139,7 @@ class SafeHttpPageReader:
                     request_url,
                     headers=request_headers,
                     extensions=extensions,
+                    timeout=attempt_timeout,
                 ) as response:
                     if response.is_redirect:
                         location = response.headers.get("location")
@@ -128,11 +148,13 @@ class SafeHttpPageReader:
                         return urljoin(target.url, location)
 
                     response.raise_for_status()
-                    content_type = response.headers.get("content-type", "").lower()
-                    if not any(
-                        allowed in content_type
-                        for allowed in ("text/html", "text/plain", "application/xhtml+xml")
-                    ):
+                    content_type = response.headers.get("content-type", "")
+                    media_type = content_type.partition(";")[0].strip().lower()
+                    if media_type not in {
+                        "text/html",
+                        "text/plain",
+                        "application/xhtml+xml",
+                    }:
                         raise ValueError(f"unsupported content type: {content_type or 'missing'}")
 
                     body = bytearray()
@@ -143,7 +165,7 @@ class SafeHttpPageReader:
 
                     encoding = response.encoding or "utf-8"
                     html = bytes(body).decode(encoding, errors="replace")
-                    title, text = self._extract_text(html, content_type)
+                    title, text = self._extract_text(html, media_type)
                     return Page(
                         title=title or target.url,
                         url=target.url,
@@ -156,6 +178,12 @@ class SafeHttpPageReader:
         if last_connection_error is not None:
             raise last_connection_error
         raise ValueError("validated target has no addresses")
+
+    def _remaining_connection_timeout(self, connection_deadline: float) -> float:
+        remaining = connection_deadline - self._clock()
+        if remaining <= 0:
+            raise TimeoutError("page connection attempt budget exhausted")
+        return min(self._timeout, remaining)
 
     @staticmethod
     def _pinned_url(target: ValidatedHttpUrl, address: str) -> str:
@@ -174,12 +202,14 @@ class SafeHttpPageReader:
         return host if target.port == default_port else f"{host}:{target.port}"
 
     @staticmethod
-    def _extract_text(content: str, content_type: str) -> tuple[str, str]:
-        if "text/plain" in content_type:
+    def _extract_text(content: str, media_type: str) -> tuple[str, str]:
+        if media_type == "text/plain":
             return "", content.strip()
         soup = BeautifulSoup(content, "html.parser")
         title = soup.title.get_text(" ", strip=True) if soup.title else ""
-        for element in soup(["script", "style", "noscript", "svg", "nav", "footer"]):
+        if soup.head:
+            soup.head.decompose()
+        for element in soup(["title", "script", "style", "noscript", "svg", "nav", "footer"]):
             element.decompose()
         lines = [line.strip() for line in soup.get_text("\n").splitlines() if line.strip()]
         return title, "\n".join(lines)
@@ -231,27 +261,41 @@ class LangChainAgentBackend(AgentBackend):
             project_name=self._trace_project if self._trace_enabled else None,
             tags=["synthetic"] if self._trace_enabled else None,
         ):
-            result = agent.invoke({"messages": [{"role": "user", "content": user_content}]})
+            result = agent.invoke(
+                {"messages": [{"role": "user", "content": user_content}]},
+                config={
+                    "recursion_limit": _AGENT_RECURSION_LIMIT,
+                    "max_concurrency": _AGENT_MAX_CONCURRENCY,
+                },
+            )
             messages = result.get("messages", [])
             if not messages:
                 raise ValueError("agent returned no messages")
             answer = _message_text(messages[-1])
 
             read_source_ids = tools.read_source_ids
-            cited_source_ids = _normalized_citation_ids(answer)
+            grounding_markdown = _normalized_grounding_markdown(answer)
+            cited_source_ids = set(extract_citation_ids(grounding_markdown))
+            has_citable_block = has_citable_content(grounding_markdown)
+            uncited_content_blocks = count_uncited_content_blocks(grounding_markdown)
             language_mismatch = _chinese_language_mismatch(question, answer)
             if read_source_ids and (
-                not cited_source_ids or not cited_source_ids <= read_source_ids or language_mismatch
+                not cited_source_ids
+                or not cited_source_ids <= read_source_ids
+                or not has_citable_block
+                or uncited_content_blocks
+                or language_mismatch
             ):
                 allowed = ", ".join(f"[{source_id}]" for source_id in sorted(read_source_ids))
                 language_instruction = (
                     " Write the revised answer in Chinese." if language_mismatch else ""
                 )
                 revision = (
-                    "Rewrite your draft without adding any facts. Every factual paragraph "
-                    "or bullet must end with at least one exact source marker chosen only "
-                    f"from: {allowed}. Omit claims that these sources do not support. "
-                    "Do not output links or a source list."
+                    "Rewrite your draft without adding any facts. Every prose paragraph, "
+                    "list item, or table data row must end with at least one exact source "
+                    f"marker chosen only from: {allowed}. Headings, separators, and fenced "
+                    "code blocks do not need markers. Omit claims that these sources do not "
+                    "support. Do not output links or a source list."
                     f"{language_instruction} Return only the revised Markdown answer."
                 )
                 revised_message = self._model.invoke(
@@ -267,10 +311,10 @@ class LangChainAgentBackend(AgentBackend):
         return answer
 
 
-def _normalized_citation_ids(markdown: str) -> set[str]:
+def _normalized_grounding_markdown(markdown: str) -> str:
     without_links, _ = remove_markdown_link_targets(markdown)
     normalized, _ = normalize_citation_markers(without_links)
-    return set(extract_citation_ids(normalized))
+    return normalized
 
 
 def _chinese_language_mismatch(question: str, answer: str) -> bool:

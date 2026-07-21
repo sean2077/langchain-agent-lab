@@ -4,13 +4,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from dataclasses import dataclass
 
-from agent_learn.domain import Source
+from agent_learn.domain import SOURCE_TITLE_MAX_CHARACTERS, Source, bounded_warning
 from agent_learn.runtime import PageReader, SearchHit, SearchProvider
 from agent_learn.security import UnsafeUrlError, validate_public_http_url
 
 UrlValidator = Callable[[str], str]
+
+_MAX_CANDIDATE_SNIPPET_CHARACTERS = 2_000
+
+
+@dataclass(frozen=True, slots=True)
+class _RegisteredSource:
+    source_id: str
+    title: str
+    url: str
+
+
+def _bounded_source_title(title: str, fallback: str) -> str:
+    return (title.strip() or fallback)[:SOURCE_TITLE_MAX_CHARACTERS]
 
 
 class ResearchTools:
@@ -28,18 +41,27 @@ class ResearchTools:
         self._page_reader = page_reader
         self._url_validator = url_validator
         self._max_search_results = max_search_results
-        self._sources_by_url: dict[str, Source] = {}
-        self._sources_by_id: dict[str, Source] = {}
-        self._read_source_ids: set[str] = set()
+        self._sources_by_url: dict[str, _RegisteredSource] = {}
+        self._sources_by_id: dict[str, _RegisteredSource] = {}
+        self._read_sources_by_id: dict[str, Source] = {}
         self.warnings: list[str] = []
 
     @property
-    def sources(self) -> list[Source]:
-        return list(self._sources_by_id.values())
+    def registered_source_ids(self) -> set[str]:
+        return set(self._sources_by_id)
+
+    @property
+    def read_sources(self) -> list[Source]:
+        return list(self._read_sources_by_id.values())
 
     @property
     def read_source_ids(self) -> set[str]:
-        return set(self._read_source_ids)
+        return set(self._read_sources_by_id)
+
+    def _record_warning(self, warning: str) -> str:
+        bounded = bounded_warning(warning)
+        self.warnings.append(bounded)
+        return bounded
 
     def search_web(self, query: str) -> str:
         """Search the public web and return source ids, titles, URLs and snippets."""
@@ -47,11 +69,10 @@ class ResearchTools:
         try:
             hits = self._search_provider.search(query, max_results=self._max_search_results)
         except Exception as exc:  # provider errors become model-visible, fail-closed warnings
-            warning = f"web search failed: {exc}"
-            self.warnings.append(warning)
+            warning = self._record_warning(f"web search failed: {exc}")
             return json.dumps({"error": warning, "sources": []}, ensure_ascii=False)
 
-        return self.register_sources(hits)
+        return self.register_sources(hits[: self._max_search_results])
 
     def register_sources(self, hits: Sequence[SearchHit]) -> str:
         """Register trusted or searched candidates in the request-local source registry."""
@@ -61,16 +82,15 @@ class ResearchTools:
             try:
                 url = self._url_validator(hit.url)
             except (UnsafeUrlError, ValueError) as exc:
-                self.warnings.append(f"skipped unsafe search result {hit.url!r}: {exc}")
+                self._record_warning(f"skipped unsafe search result {hit.url!r}: {exc}")
                 continue
 
             source = self._sources_by_url.get(url)
             if source is None:
-                source = Source(
+                source = _RegisteredSource(
                     source_id=f"S{len(self._sources_by_id) + 1}",
-                    title=hit.title.strip() or url,
+                    title=_bounded_source_title(hit.title, url),
                     url=url,
-                    retrieved_at=datetime.now(UTC),
                 )
                 self._sources_by_url[url] = source
                 self._sources_by_id[source.source_id] = source
@@ -79,7 +99,7 @@ class ResearchTools:
                     "source_id": source.source_id,
                     "title": source.title,
                     "url": source.url,
-                    "snippet": hit.snippet,
+                    "snippet": hit.snippet[:_MAX_CANDIDATE_SNIPPET_CHARACTERS],
                 }
             )
 
@@ -91,24 +111,29 @@ class ResearchTools:
 
         source = self._sources_by_id.get(source_id)
         if source is None:
-            warning = f"unknown source id: {source_id}"
-            self.warnings.append(warning)
+            warning = self._record_warning(f"unknown source id: {source_id}")
             return json.dumps({"error": warning}, ensure_ascii=False)
 
         try:
             page = self._page_reader.read(source.url)
+            final_url = self._url_validator(page.url)
+            read_source = Source(
+                source_id=source_id,
+                title=_bounded_source_title(page.title, final_url),
+                url=final_url,
+                retrieved_at=page.retrieved_at,
+            )
         except Exception as exc:  # network/parser failures must not crash the agent loop
-            warning = f"failed to read {source_id}: {exc}"
-            self.warnings.append(warning)
+            warning = self._record_warning(f"failed to read {source_id}: {exc}")
             return json.dumps({"error": warning, "source_id": source_id}, ensure_ascii=False)
 
-        self._read_source_ids.add(source_id)
+        self._read_sources_by_id[source_id] = read_source
         return json.dumps(
             {
                 "source_id": source_id,
-                "title": page.title,
-                "url": page.url,
-                "retrieved_at": page.retrieved_at.isoformat(),
+                "title": read_source.title,
+                "url": read_source.url,
+                "retrieved_at": read_source.retrieved_at.isoformat(),
                 "text": page.text,
             },
             ensure_ascii=False,

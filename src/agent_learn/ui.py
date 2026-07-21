@@ -6,10 +6,16 @@ import streamlit as st
 
 from agent_learn.bootstrap import build_research_service
 from agent_learn.cli import Researcher
-from agent_learn.domain import ResearchReport, ResearchRequest
+from agent_learn.config import ConfigurationError
+from agent_learn.domain import ResearchReport, ResearchRequest, remove_markdown_link_targets
 
 _SERVICE_KEY = "_agent_learn_service"
 _HISTORY_KEY = "_agent_learn_history"
+
+
+def _source_link_label(source_id: str, title: str) -> str:
+    safe_title, _ = remove_markdown_link_targets(title)
+    return f"[{source_id}] {safe_title or 'Source'}"
 
 
 @st.cache_resource(show_spinner=False)
@@ -18,19 +24,19 @@ def _default_service() -> Researcher:
     return build_research_service(trace_enabled=False)
 
 
-def _escape_markdown(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
-
-
 def _render_report(report: ResearchReport) -> None:
     st.markdown(report.answer_markdown)
     if report.sources:
         st.markdown("#### 来源")
         for source in report.sources:
-            title = _escape_markdown(source.title)
-            st.markdown(f"- `[{source.source_id}]` [{title}]({source.url})")
+            st.link_button(
+                _source_link_label(source.source_id, source.title),
+                source.url,
+                type="tertiary",
+            )
     for warning in report.warnings:
-        st.warning(warning)
+        st.warning("研究过程中出现警告，详情如下：")
+        st.code(warning, language=None, wrap_lines=True)
 
 
 def _render_exchange(question: str, report: ResearchReport) -> None:
@@ -47,7 +53,12 @@ def run_app() -> None:
 
     service = st.session_state.get(_SERVICE_KEY)
     if service is None:
-        service = _default_service()
+        try:
+            service = _default_service()
+        except ConfigurationError as error:
+            st.error("运行时配置无效，详情如下：")
+            st.code(str(error), language=None, wrap_lines=True)
+            return
         st.session_state[_SERVICE_KEY] = service
 
     history: list[dict[str, object]] = st.session_state.setdefault(_HISTORY_KEY, [])
@@ -69,9 +80,13 @@ def run_app() -> None:
                 report = service.research(ResearchRequest(question=question))
             except Exception as exc:  # keep the local UI usable at the outermost boundary
                 status.update(label="研究失败", state="error")
-                st.error(f"研究流程失败：{exc}")
+                st.error("研究流程失败，详情如下：")
+                st.code(str(exc), language=None, wrap_lines=True)
                 return
-            status.update(label="研究完成", state="complete", expanded=False)
+            if report.is_source_grounded:
+                status.update(label="研究完成", state="complete", expanded=False)
+            else:
+                status.update(label="研究未完成", state="error", expanded=False)
         _render_report(report)
 
     history.append(

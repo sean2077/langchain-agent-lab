@@ -14,7 +14,6 @@ dependencies = [
   "deepagents>=0.3,<1",
   "httpx>=0.28,<1",
   "langchain>=1,<2",
-  "langchain-community>=0.4,<1",
   "langchain-ollama>=1,<2",
   "langgraph>=1,<2",
   "langsmith>=0.4,<1",
@@ -25,13 +24,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.4,<10",
-  "pytest-asyncio>=1,<2",
-  "pytest-httpx>=0.35,<1",
   "ruff>=0.12,<1",
 ]
 
 [project.scripts]
 agent-learn = "agent_learn.cli:main"
+agent-learn-eval = "agent_learn.evaluation:main"
 agent-learn-trace = "agent_learn.trace_demo:main"
 
 [tool.hatch.build.targets.wheel]

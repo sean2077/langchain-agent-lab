@@ -7,7 +7,9 @@
 - 模型在本机 Ollama 运行，默认 `qwen3.5:9b`；`OLLAMA_BASE_URL` 只接受
   `localhost`、IPv4 loopback 或 IPv6 loopback 的 HTTP(S) endpoint，其他目标会在启动时拒绝；
   Ollama client 不继承系统 HTTP proxy。
-- Agent 只能搜索公网和读取已登记的来源，不能把任意 URL 直接交给读取工具。
+- Agent 只能搜索公网和读取已登记的候选，不能把任意 URL 直接交给读取工具。搜索候选与
+  已读证据分开保存；报告只列出成功读取的页面，并使用重定向后再次通过公网校验的最终
+  URL、页面标题和实际读取时间，不会把未读候选伪装成来源。
 - 成功报告必须至少包含一个可引用正文 block，且每个正文段落、列表项和表格数据行都必须
   包含 `[S1]` 形式引用；标题、分隔线和 fenced code block 属于结构性豁免。未知、未成功
   读取或覆盖不完整的来源 id 会导致 fail-closed 报告；该检查证明引用可见且来源已读取，
@@ -109,7 +111,7 @@ uv run --extra dev pytest -m "live and not hosted_langsmith" -q
 
 - `domain.py`：稳定的请求、来源和报告契约。
 - `research.py`：一次研究请求的深模块与 fail-closed 策略。
-- `tools.py`：每次请求独立的 source registry，只允许按 source id 读取。
+- `tools.py`：每次请求独立地管理搜索候选与已读证据，只允许按已登记的 source id 读取。
 - `catalog.py`：LangChain、LangGraph、LangSmith、Deep Agents 与 Dify 的核验后官方入口。
 - `security.py`：公网 URL、DNS、Fake-IP 与 SSRF 防护边界。
 - `adapters.py`：DuckDuckGo、受限 HTTP reader、LangChain 与 Ollama 适配器。

@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from dataclasses import dataclass
 
 from agent_learn.domain import Source
 from agent_learn.runtime import PageReader, SearchHit, SearchProvider
 from agent_learn.security import UnsafeUrlError, validate_public_http_url
 
 UrlValidator = Callable[[str], str]
+
+
+@dataclass(frozen=True, slots=True)
+class _RegisteredSource:
+    source_id: str
+    title: str
+    url: str
 
 
 class ResearchTools:
@@ -28,18 +35,22 @@ class ResearchTools:
         self._page_reader = page_reader
         self._url_validator = url_validator
         self._max_search_results = max_search_results
-        self._sources_by_url: dict[str, Source] = {}
-        self._sources_by_id: dict[str, Source] = {}
-        self._read_source_ids: set[str] = set()
+        self._sources_by_url: dict[str, _RegisteredSource] = {}
+        self._sources_by_id: dict[str, _RegisteredSource] = {}
+        self._read_sources_by_id: dict[str, Source] = {}
         self.warnings: list[str] = []
 
     @property
-    def sources(self) -> list[Source]:
-        return list(self._sources_by_id.values())
+    def registered_source_ids(self) -> set[str]:
+        return set(self._sources_by_id)
+
+    @property
+    def read_sources(self) -> list[Source]:
+        return list(self._read_sources_by_id.values())
 
     @property
     def read_source_ids(self) -> set[str]:
-        return set(self._read_source_ids)
+        return set(self._read_sources_by_id)
 
     def search_web(self, query: str) -> str:
         """Search the public web and return source ids, titles, URLs and snippets."""
@@ -66,11 +77,10 @@ class ResearchTools:
 
             source = self._sources_by_url.get(url)
             if source is None:
-                source = Source(
+                source = _RegisteredSource(
                     source_id=f"S{len(self._sources_by_id) + 1}",
                     title=hit.title.strip() or url,
                     url=url,
-                    retrieved_at=datetime.now(UTC),
                 )
                 self._sources_by_url[url] = source
                 self._sources_by_id[source.source_id] = source
@@ -97,18 +107,25 @@ class ResearchTools:
 
         try:
             page = self._page_reader.read(source.url)
+            final_url = self._url_validator(page.url)
+            read_source = Source(
+                source_id=source_id,
+                title=page.title.strip() or final_url,
+                url=final_url,
+                retrieved_at=page.retrieved_at,
+            )
         except Exception as exc:  # network/parser failures must not crash the agent loop
             warning = f"failed to read {source_id}: {exc}"
             self.warnings.append(warning)
             return json.dumps({"error": warning, "source_id": source_id}, ensure_ascii=False)
 
-        self._read_source_ids.add(source_id)
+        self._read_sources_by_id[source_id] = read_source
         return json.dumps(
             {
                 "source_id": source_id,
-                "title": page.title,
-                "url": page.url,
-                "retrieved_at": page.retrieved_at.isoformat(),
+                "title": read_source.title,
+                "url": read_source.url,
+                "retrieved_at": read_source.retrieved_at.isoformat(),
                 "text": page.text,
             },
             ensure_ascii=False,

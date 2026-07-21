@@ -10,6 +10,7 @@ from agent_learn.domain import (
     ResearchReport,
     ResearchRequest,
     Source,
+    extract_citation_ids,
     normalize_citation_markers,
     remove_markdown_link_targets,
 )
@@ -43,7 +44,9 @@ class ResearchService:
         try:
             answer = self._agent_backend.answer(request.question, tools).strip()
         except Exception as exc:
-            return self._failed_report(tools.sources, [*tools.warnings, f"agent failed: {exc}"])
+            return self._failed_report(
+                tools.read_sources, [*tools.warnings, f"agent failed: {exc}"]
+            )
 
         answer, removed_link_count = remove_markdown_link_targets(answer)
         answer, normalized_citation_count = normalize_citation_markers(answer)
@@ -57,38 +60,49 @@ class ResearchService:
                 f"removed {removed_link_count} Markdown link target(s) from model response"
             )
 
-        if not tools.sources:
+        if not tools.registered_source_ids:
             return self._failed_report([], [*report_warnings, "agent collected no sources"])
 
-        try:
-            report = ResearchReport(
-                answer_markdown=answer,
-                sources=tools.sources,
-                warnings=report_warnings,
-            )
-        except ValidationError as exc:
-            concise_error = "; ".join(error["msg"] for error in exc.errors())
+        cited_source_ids = extract_citation_ids(answer)
+        unknown_source_ids = sorted(set(cited_source_ids) - tools.registered_source_ids)
+        if unknown_source_ids:
             return self._failed_report(
-                tools.sources,
-                [*report_warnings, f"report validation failed: {concise_error}"],
+                tools.read_sources,
+                [
+                    *report_warnings,
+                    f"report validation failed: unknown source ids: "
+                    f"{', '.join(unknown_source_ids)}",
+                ],
             )
 
-        if not report.cited_source_ids:
+        if not cited_source_ids:
             return self._failed_report(
-                tools.sources,
+                tools.read_sources,
                 [*report_warnings, "model response contained no source citations"],
             )
 
-        unread_source_ids = sorted(set(report.cited_source_ids) - tools.read_source_ids)
+        unread_source_ids = sorted(set(cited_source_ids) - tools.read_source_ids)
         if unread_source_ids:
             return self._failed_report(
-                tools.sources,
+                tools.read_sources,
                 [
                     *report_warnings,
                     f"model cited unread sources: {', '.join(unread_source_ids)}",
                 ],
             )
-        return report
+
+        try:
+            return ResearchReport(
+                answer_markdown=answer,
+                sources=tools.read_sources,
+                warnings=report_warnings,
+            )
+        except ValidationError as exc:
+            concise_error = "; ".join(error["msg"] for error in exc.errors())
+            return self._failed_report(
+                tools.read_sources,
+                [*report_warnings, f"report validation failed: {concise_error}"],
+            )
 
     @staticmethod
     def _failed_report(sources: list[Source], warnings: list[str]) -> ResearchReport:

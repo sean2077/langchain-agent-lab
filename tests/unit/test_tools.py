@@ -19,13 +19,25 @@ class Reader(PageReader):
         return Page("Fetched", url, "Readable page text", datetime.now(UTC))
 
 
+class RedirectingReader(PageReader):
+    retrieved_at = datetime(2026, 7, 21, 12, 0, tzinfo=UTC)
+
+    def read(self, url: str) -> Page:
+        return Page(
+            "Final page title",
+            "https://docs.example.com/final",
+            "Redirected page text",
+            self.retrieved_at,
+        )
+
+
 def test_search_assigns_stable_ids_and_deduplicates_urls() -> None:
     tools = ResearchTools(DuplicateSearch(), Reader(), url_validator=lambda url: url)
 
     payload = json.loads(tools.search_web("query"))
 
     assert [item["source_id"] for item in payload["sources"]] == ["S1", "S2"]
-    assert [source.source_id for source in tools.sources] == ["S1", "S2"]
+    assert tools.registered_source_ids == {"S1", "S2"}
 
 
 def test_register_sources_seeds_candidates_before_web_search() -> None:
@@ -60,3 +72,41 @@ def test_read_source_returns_page_without_exposing_new_url_input() -> None:
     assert result["source_id"] == "S1"
     assert result["text"] == "Readable page text"
     assert tools.read_source_ids == {"S1"}
+
+
+def test_read_source_records_validated_final_page_as_evidence() -> None:
+    tools = ResearchTools(DuplicateSearch(), RedirectingReader(), url_validator=lambda url: url)
+    tools.search_web("query")
+
+    result = json.loads(tools.read_source("S1"))
+
+    assert result["title"] == "Final page title"
+    assert result["url"] == "https://docs.example.com/final"
+    assert json.loads(tools.search_web("query"))["sources"][0]["url"] == "https://example.com/a"
+    assert [source.model_dump(mode="json") for source in tools.read_sources] == [
+        {
+            "source_id": "S1",
+            "title": "Final page title",
+            "url": "https://docs.example.com/final",
+            "retrieved_at": "2026-07-21T12:00:00Z",
+        }
+    ]
+
+
+def test_read_source_rejects_unvalidated_final_page_url() -> None:
+    def reject_final_url(url: str) -> str:
+        if url == "https://docs.example.com/final":
+            raise ValueError("final URL is not public")
+        return url
+
+    tools = ResearchTools(DuplicateSearch(), RedirectingReader(), url_validator=reject_final_url)
+    tools.search_web("query")
+
+    result = json.loads(tools.read_source("S1"))
+
+    assert result == {
+        "error": "failed to read S1: final URL is not public",
+        "source_id": "S1",
+    }
+    assert tools.read_source_ids == set()
+    assert tools.read_sources == []

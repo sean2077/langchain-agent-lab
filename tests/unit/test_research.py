@@ -74,6 +74,33 @@ class PartiallyGroundedBackend(AgentBackend):
         return "LangChain 适合所有生产工作负载。\n\nLangChain v1 的标准入口是 `create_agent`。[S1]"
 
 
+class CandidateSearch(SearchProvider):
+    def search(self, query: str, *, max_results: int) -> list[SearchHit]:
+        return [
+            SearchHit("Search title", "https://example.com/start", "read candidate"),
+            SearchHit("Unread candidate", "https://example.com/unread", "not read"),
+        ]
+
+
+class RedirectingReader(PageReader):
+    retrieved_at = datetime(2026, 7, 21, 12, 0, tzinfo=UTC)
+
+    def read(self, url: str) -> Page:
+        return Page(
+            title="Final page title",
+            url="https://docs.example.com/final",
+            text="Grounded evidence.",
+            retrieved_at=self.retrieved_at,
+        )
+
+
+class ReadsFirstCandidateBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.search_web("query")
+        tools.read_source("S1")
+        return "Grounded answer. [S1]"
+
+
 def test_research_service_returns_grounded_report() -> None:
     service = ResearchService(
         FakeSearch(), FakeReader(), GroundedBackend(), url_validator=lambda url: url
@@ -83,6 +110,28 @@ def test_research_service_returns_grounded_report() -> None:
 
     assert report.cited_source_ids == ["S1"]
     assert report.sources[0].title == "LangChain v1"
+    assert report.warnings == []
+
+
+def test_successful_report_exposes_only_read_final_page_provenance() -> None:
+    service = ResearchService(
+        CandidateSearch(),
+        RedirectingReader(),
+        ReadsFirstCandidateBackend(),
+        url_validator=lambda url: url,
+    )
+
+    report = service.research(ResearchRequest(question="question"))
+
+    assert [source.model_dump(mode="json") for source in report.sources] == [
+        {
+            "source_id": "S1",
+            "title": "Final page title",
+            "url": "https://docs.example.com/final",
+            "retrieved_at": "2026-07-21T12:00:00Z",
+        }
+    ]
+    assert report.cited_source_ids == ["S1"]
     assert report.warnings == []
 
 
@@ -117,6 +166,7 @@ def test_research_service_fails_closed_on_citation_to_unread_source() -> None:
     report = service.research(ResearchRequest(question="LangChain 是什么？"))
 
     assert report.cited_source_ids == []
+    assert report.sources == []
     assert any("cited unread sources: S1" in warning for warning in report.warnings)
 
 

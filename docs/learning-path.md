@@ -17,7 +17,8 @@
 
 ## 阶段 3：只读资料研究核心
 
-- 理解 Source registry、`[S1]` identity/coverage 引用契约、语义支持边界和 fail-closed 行为。
+- 理解搜索候选与已读证据的 provenance 边界、`[S1]` identity/coverage 引用契约、语义支持
+  边界和 fail-closed 行为。
 - 运行单元测试，分别让搜索、页面读取、模型与引用校验失败一次。
 - 用 CLI 完成三个非敏感问题，并检查来源是否支持正文。
 

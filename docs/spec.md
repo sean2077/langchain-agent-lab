@@ -11,8 +11,10 @@
 - 只读搜索和网页读取；工具失败或证据不足时 fail closed，不用模型记忆补写事实。
 - 核心接口为 `research(ResearchRequest) -> ResearchReport`。
 - `ResearchRequest` 包含 `question`。
-- `Source` 包含 `source_id`、`title`、`url`、`retrieved_at`。
-- `ResearchReport` 包含 `answer_markdown`、`sources`、`warnings`。
+- `Source` 包含 `source_id`、`title`、`url`、`retrieved_at`，只在页面成功读取且最终 URL
+  再次通过公网校验后创建；其元数据来自实际读取的最终页面，而不是搜索结果或登记时间。
+- `ResearchReport` 包含 `answer_markdown`、`sources`、`warnings`；`sources` 只列成功读取
+  的页面，不包含未读搜索候选。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。
 - 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
   data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性

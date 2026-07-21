@@ -7,16 +7,16 @@
 ## 简短答案
 
 搜索候选只表示“这个 URL 可能值得读”，不能证明页面可访问、内容与摘要一致，也不能作为
-最终报告来源。已读证据表示页面已经通过读取边界，且记录的是实际响应页面的标题、最终 URL
-和读取时间。重定向会改变真正访问的目标，因此每一跳和最终记录都必须重新通过公网 URL
-校验；否则一个安全的起始 URL 可以把读取器带到本机、私网或其他未经批准的目标。
+最终报告来源。已读证据表示页面已经通过读取边界，且记录的是实际响应页面标题的受限表示、
+最终 URL 和读取时间。重定向会改变真正访问的目标，因此每一跳和最终记录都必须重新通过
+公网 URL 校验；否则一个安全的起始 URL 可以把读取器带到本机、私网或其他未经批准的目标。
 
 ## 两种状态不是同一份数据
 
 | 状态 | 数据从哪里来 | 已经证明什么 | 还不能证明什么 |
 | --- | --- | --- | --- |
 | 搜索候选 | 搜索 provider 或仓库内预登记目录 | URL 形式和解析结果通过登记时的公网校验；候选获得请求内 `S#` | 页面成功读取、摘要准确、最终位置安全、内容可支持回答 |
-| 已读证据 | 页面读取器的实际响应 | 读取成功；最终页面再次通过校验；有实际标题、最终 URL、`retrieved_at` | 页面中的每句话都可信，或它一定语义支持模型陈述 |
+| 已读证据 | 页面读取器的实际响应 | 读取成功；最终页面再次通过校验；有实际页面标题的最多 500 字符前缀、完整最终 URL、`retrieved_at` | 页面中的每句话都可信，或它一定语义支持模型陈述 |
 
 搜索摘要仍是 provider 提供的线索。即使候选来自仓库内核验过的官方目录，也必须经过相同的
 `read_source` 流程；“预登记”只改善发现路径，不会把候选升级为证据。
@@ -33,7 +33,8 @@ snippet 最多 2,000 字符；空 title 使用完整已验证 URL 的前 500 字
 
 这些都是 provider 已返回 Python 对象后的字符数限制。它们不能减少已经下载的响应、provider
 内部已经分配的内存，也不是精确的 JSON byte 或模型 token 上限。候选字段仍只是发现线索；
-成功读取后的 `Source.title` 来自实际页面，不会用被截断的搜索标题冒充 provenance。
+成功读取后的 `Source.title` 来自实际页面的受限表示，不会用被截断的搜索标题冒充
+provenance。
 
 本项目的状态转换如下：
 
@@ -79,16 +80,20 @@ Location: http://127.0.0.1:11434/api/tags
 搜索结果的标题和 URL 可能只是旧地址、短链接或入口页。证据的 provenance 应回答：
 
 - 最终读到哪个 URL；
-- 响应页面实际给出的标题是什么；
+- 响应页面实际给出的标题在 domain 允许范围内是什么；
 - 什么时候读取的。
 
 所以成功读取后，原来的 `S#` 身份保持稳定，但 `Source.title`、`Source.url` 和
-`Source.retrieved_at` 来自最终页面，而不是搜索结果。未读候选不会出现在报告来源列表中。
+`Source.retrieved_at` 来自最终页面，而不是搜索结果。Page→Source 边界把实际标题 strip 后
+保留最多 500 字符；若标题为空，则保留最终 URL 的最多 500 字符作为显示 fallback，但
+`Source.url` 仍保存完整 identity。这样外部元数据不会因超过稳定 domain contract 而让已成功
+读取的正文丢失。直接构造超过 500 字符的 `Source.title` 仍会失败。未读候选不会出现在报告
+来源列表中。
 
 #### 标题是证据元数据，不是可信 UI 标记
 
-实际页面标题由远端站点控制。报告应原样保存它，才能准确描述读取时观察到的 provenance；
-但“保存原值”不表示可以把它原样送入每个渲染器。[Streamlit `st.link_button` 文档](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
+实际页面标题由远端站点控制。报告保存它在 domain 限制内的前缀，而不是搜索标题；但“来自
+实际页面”不表示可以把该值原样送入每个渲染器。[Streamlit `st.link_button` 文档](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
 明确说明 `label` 支持 GFM Links 和 Images，因此即使真正的 `Source.url` 已放在独立 `url`
 参数中，下面这个标题仍会给 label 引入第二个活动目标：
 
@@ -98,7 +103,7 @@ Official [injected](https://attacker.example) ![pixel](https://tracker.example/p
 
 UI 在构造来源按钮 label 时，对 `Source.title` 应用与答案正文相同的活动目标移除规则，只保留
 可见 label 文本；如果标题只由目标组成，使用固定的 `Source`。按钮的 `url` 参数仍是经过验证
-的最终来源 URL，`ResearchReport`、JSON 和 CLI 中的原始标题都不改变。这是面向具体 GFM sink
+的最终来源 URL，`ResearchReport`、JSON 和 CLI 中已记录的标题都不改变。这是面向具体 GFM sink
 的输出编码，不是对 provenance 的改写，也不声称提供通用 HTML sanitization。
 
 ### 3. 读取器与领域边界做了纵深校验

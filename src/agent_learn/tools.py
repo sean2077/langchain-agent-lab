@@ -6,13 +6,12 @@ import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from agent_learn.domain import Source
+from agent_learn.domain import SOURCE_TITLE_MAX_CHARACTERS, Source
 from agent_learn.runtime import PageReader, SearchHit, SearchProvider
 from agent_learn.security import UnsafeUrlError, validate_public_http_url
 
 UrlValidator = Callable[[str], str]
 
-_MAX_CANDIDATE_TITLE_CHARACTERS = 500
 _MAX_CANDIDATE_SNIPPET_CHARACTERS = 2_000
 
 
@@ -21,6 +20,10 @@ class _RegisteredSource:
     source_id: str
     title: str
     url: str
+
+
+def _bounded_source_title(title: str, fallback: str) -> str:
+    return (title.strip() or fallback)[:SOURCE_TITLE_MAX_CHARACTERS]
 
 
 class ResearchTools:
@@ -80,10 +83,9 @@ class ResearchTools:
 
             source = self._sources_by_url.get(url)
             if source is None:
-                title = hit.title.strip()[:_MAX_CANDIDATE_TITLE_CHARACTERS]
                 source = _RegisteredSource(
                     source_id=f"S{len(self._sources_by_id) + 1}",
-                    title=title or url[:_MAX_CANDIDATE_TITLE_CHARACTERS],
+                    title=_bounded_source_title(hit.title, url),
                     url=url,
                 )
                 self._sources_by_url[url] = source
@@ -114,7 +116,7 @@ class ResearchTools:
             final_url = self._url_validator(page.url)
             read_source = Source(
                 source_id=source_id,
-                title=page.title.strip() or final_url,
+                title=_bounded_source_title(page.title, final_url),
                 url=final_url,
                 retrieved_at=page.retrieved_at,
             )

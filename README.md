@@ -11,13 +11,14 @@
   既有 fail-closed，但这不是整个 Agent run 的硬 wall-clock deadline。
 - Agent 只能搜索公网和读取已登记的候选，不能把任意 URL 直接交给读取工具。搜索候选与
   已读证据分开保存；报告只列出成功读取的页面，并使用重定向后再次通过公网校验的最终
-  URL、页面标题和实际读取时间，不会把未读候选伪装成来源。每次 web search 最多把 provider
-  返回的前 5 条结果登记并交给模型，即使 provider 忽略请求的结果上限；所有搜索或预登记
+  URL、实际页面标题的最多 500 字符前缀和真实读取时间；空标题以最终 URL 的最多 500 字符
+  前缀显示，不会把未读候选伪装成来源。每次 web search 最多把 provider 返回的前 5 条结果
+  登记并交给模型，即使 provider 忽略请求的结果上限；所有搜索或预登记
   候选在模型可见 JSON 中的 title 最多 500 字符、snippet 最多 2,000 字符，完整已验证 URL
   identity 不变。字段上限在 provider 返回后执行，不是响应字节、token 或下载分配上限。
 - Streamlit 来源链接通过分离的 label/URL 参数渲染，来源 URL 不会拼接进 Markdown 语法；
-  远端页面标题进入 GFM-capable label 前会移除活动链接、图片和 autolink 目标，报告中的原始
-  provenance 标题保持不变。
+  远端页面标题进入 GFM-capable label 前会移除活动链接、图片和 autolink 目标，报告中已记录
+  的受限 provenance 标题保持不变。
 - Streamlit warning/error 使用固定 alert 文案，并把上游诊断详情作为非 Markdown code text
   渲染，避免把搜索结果或异常内容解释成活动链接。
 - `ResearchReport.outcome` 提供稳定的 terminal category；domain 只允许带有效 citations 的

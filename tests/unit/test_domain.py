@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_learn.domain import (
+    SOURCE_TITLE_MAX_CHARACTERS,
     ResearchOutcome,
     ResearchReport,
     ResearchRequest,
@@ -64,6 +65,16 @@ def test_research_request_strips_question() -> None:
 def test_research_request_rejects_blank_question(question: str) -> None:
     with pytest.raises(ValidationError):
         ResearchRequest(question=question)
+
+
+def test_source_rejects_title_over_domain_limit() -> None:
+    with pytest.raises(ValidationError, match="at most 500 characters"):
+        Source(
+            source_id="S1",
+            title="T" * (SOURCE_TITLE_MAX_CHARACTERS + 1),
+            url="https://example.com/source",
+            retrieved_at=datetime.now(UTC),
+        )
 
 
 def test_extract_citation_ids_preserves_first_seen_order() -> None:

@@ -57,6 +57,8 @@ _TABLE_SEPARATOR_PATTERN = re.compile(
     r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*$"
 )
 
+SOURCE_TITLE_MAX_CHARACTERS = 500
+
 
 def extract_citation_ids(markdown: str) -> list[str]:
     """Return unique visible citation ids in first-seen order."""
@@ -450,7 +452,7 @@ class Source(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     source_id: str = Field(pattern=r"^S[1-9]\d*$")
-    title: str = Field(min_length=1, max_length=500)
+    title: str = Field(min_length=1, max_length=SOURCE_TITLE_MAX_CHARACTERS)
     url: str = Field(min_length=1, max_length=2_048)
     retrieved_at: datetime
 

@@ -1,6 +1,8 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from agent_learn.runtime import Page, PageReader, SearchHit, SearchProvider
 from agent_learn.tools import ResearchTools
 
@@ -50,6 +52,20 @@ class RedirectingReader(PageReader):
             "https://docs.example.com/final",
             "Redirected page text",
             self.retrieved_at,
+        )
+
+
+class MetadataReader(PageReader):
+    def __init__(self, title: str, final_url: str) -> None:
+        self.title = title
+        self.final_url = final_url
+
+    def read(self, url: str) -> Page:
+        return Page(
+            self.title,
+            self.final_url,
+            "Readable page text",
+            datetime(2026, 7, 21, 12, 0, tzinfo=UTC),
         )
 
 
@@ -141,6 +157,42 @@ def test_read_source_records_validated_final_page_as_evidence() -> None:
             "retrieved_at": "2026-07-21T12:00:00Z",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("page_title", "final_url", "expected_title"),
+    [
+        (
+            "T" * 600,
+            "https://docs.example.com/final",
+            "T" * 500,
+        ),
+        (
+            "   ",
+            "https://docs.example.com/" + "u" * 600,
+            ("https://docs.example.com/" + "u" * 600)[:500],
+        ),
+    ],
+)
+def test_read_source_adapts_external_title_to_domain_limit(
+    page_title: str,
+    final_url: str,
+    expected_title: str,
+) -> None:
+    tools = ResearchTools(
+        DuplicateSearch(),
+        MetadataReader(page_title, final_url),
+        url_validator=lambda url: url,
+    )
+    tools.search_web("query")
+
+    result = json.loads(tools.read_source("S1"))
+
+    assert result["title"] == expected_title
+    assert result["url"] == final_url
+    assert result["text"] == "Readable page text"
+    assert result["retrieved_at"] == "2026-07-21T12:00:00+00:00"
+    assert tools.read_source_ids == {"S1"}
 
 
 def test_read_source_rejects_unvalidated_final_page_url() -> None:

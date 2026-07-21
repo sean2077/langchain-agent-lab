@@ -54,6 +54,21 @@ class MarkdownInjectionService:
         )
 
 
+class MarkdownDiagnosticService:
+    payload = "[Injected](https://attacker.example)"
+
+    def research(self, request: ResearchRequest) -> ResearchReport:
+        return ResearchReport(
+            answer_markdown="无法生成有来源支持的研究报告。",
+            warnings=[self.payload],
+        )
+
+
+class MarkdownExceptionService:
+    def research(self, request: ResearchRequest) -> ResearchReport:
+        raise RuntimeError(MarkdownDiagnosticService.payload)
+
+
 def build_app(service: object) -> AppTest:
     app = AppTest.from_file(APP_PATH)
     app.session_state["_agent_learn_service"] = service
@@ -83,7 +98,8 @@ def test_ui_renders_fail_closed_warning() -> None:
 
     assert app.status[0].label == "研究未完成"
     assert app.status[0].state == "error"
-    assert any("Search failed" in warning.value for warning in app.warning)
+    assert [warning.value for warning in app.warning] == ["研究过程中出现警告，详情如下："]
+    assert any("Search failed" in detail.value for detail in app.code)
     assert any("无法生成有来源支持的研究报告" in item.value for item in app.markdown)
     assert not app.exception
 
@@ -95,7 +111,8 @@ def test_ui_does_not_treat_warning_alone_as_failure() -> None:
 
     assert app.status[0].label == "研究完成"
     assert app.status[0].state == "complete"
-    assert any("Citation marker normalized" in warning.value for warning in app.warning)
+    assert [warning.value for warning in app.warning] == ["研究过程中出现警告，详情如下："]
+    assert any("Citation marker normalized" in detail.value for detail in app.code)
     assert not app.exception
 
 
@@ -109,4 +126,30 @@ def test_ui_keeps_source_url_out_of_markdown_syntax() -> None:
     assert links[0].label == "[S1] Official [docs]"
     assert links[0].url == MarkdownInjectionService.source_url
     assert all("attacker.example" not in element.value for element in app.markdown)
+    assert not app.exception
+
+
+def test_ui_keeps_warning_detail_out_of_markdown_alert() -> None:
+    app = build_app(MarkdownDiagnosticService())
+
+    app.chat_input[0].set_value("LangChain").run()
+
+    assert [item.value for item in app.warning] == ["研究过程中出现警告，详情如下："]
+    assert app.code[-1].value == MarkdownDiagnosticService.payload
+    assert all("attacker.example" not in item.value for item in app.warning)
+    assert all("attacker.example" not in item.value for item in app.markdown)
+    assert not app.exception
+
+
+def test_ui_keeps_exception_detail_out_of_markdown_alert() -> None:
+    app = build_app(MarkdownExceptionService())
+
+    app.chat_input[0].set_value("LangChain").run()
+
+    assert app.status[0].label == "研究失败"
+    assert app.status[0].state == "error"
+    assert [item.value for item in app.error] == ["研究流程失败，详情如下："]
+    assert app.code[-1].value == MarkdownDiagnosticService.payload
+    assert all("attacker.example" not in item.value for item in app.error)
+    assert all("attacker.example" not in item.value for item in app.markdown)
     assert not app.exception

@@ -29,7 +29,8 @@ def _render_report(report: ResearchReport) -> None:
                 type="tertiary",
             )
     for warning in report.warnings:
-        st.warning(warning)
+        st.warning("研究过程中出现警告，详情如下：")
+        st.code(warning, language=None, wrap_lines=True)
 
 
 def _render_exchange(question: str, report: ResearchReport) -> None:
@@ -68,7 +69,8 @@ def run_app() -> None:
                 report = service.research(ResearchRequest(question=question))
             except Exception as exc:  # keep the local UI usable at the outermost boundary
                 status.update(label="研究失败", state="error")
-                st.error(f"研究流程失败：{exc}")
+                st.error("研究流程失败，详情如下：")
+                st.code(str(exc), language=None, wrap_lines=True)
                 return
             if report.cited_source_ids:
                 status.update(label="研究完成", state="complete", expanded=False)

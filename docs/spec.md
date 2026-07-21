@@ -16,6 +16,7 @@
 - `ResearchReport` 包含 `answer_markdown`、`sources`、`warnings`；`sources` 只列成功读取
   的页面，不包含未读搜索候选。
 - Streamlit 使用参数化链接组件渲染来源，已验证 URL 不进入 Markdown destination 字符串。
+- Streamlit warning/error 的 severity 文案固定，上游诊断详情只进入非 Markdown code element。
 - CLI 与 Streamlit 共享报告成功语义：只有包含有效 citations 的报告才标记成功；fail-closed
   报告保留答案与 warnings，但 CLI 返回非零、UI 标记未完成/error。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。

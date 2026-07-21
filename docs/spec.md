@@ -26,7 +26,8 @@
   来源确实被引用，语义支持与“可直接使用”由人工 rubric 评审。实验不启用 hosted tracing，
   不持久化模型输出。
 - Streamlit 只绑定 `127.0.0.1`；CLI 调用同一个核心接口。
-- LangSmith 只允许在专用合成测试配置中启用，正常 UI 默认关闭。
+- LangSmith 只允许在专用合成测试配置中启用；正常 CLI/UI/eval 以 request-local context
+  显式覆盖环境 tracing 开关，合成 opt-in 使用独立 project 和 `synthetic` tag。
 
 ## Technology decisions
 

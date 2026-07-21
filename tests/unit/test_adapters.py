@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
+from langsmith import get_tracing_context
+from langsmith.utils import get_env_var, tracing_is_enabled
 
 from agent_learn.adapters import LangChainAgentBackend, SafeHttpPageReader
 from agent_learn.runtime import Page, SearchHit
@@ -193,3 +195,62 @@ def test_agent_backend_repairs_language_for_chinese_question(
     assert answer == "中文答案。[S1]"
     assert len(model_invocations) == 1
     assert "Write the revised answer in Chinese" in str(model_invocations[0])
+
+
+def test_normal_agent_and_repair_override_globally_enabled_tracing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    get_env_var.cache_clear()
+    tools = ResearchTools(OneResultSearch(), SuccessfulReader(), url_validator=lambda url: url)
+    tools.search_web("official docs")
+    tools.read_source("S1")
+    observed_states: list[bool | str] = []
+
+    class FakeAgent:
+        def invoke(self, payload: dict[str, object]) -> dict[str, object]:
+            observed_states.append(tracing_is_enabled())
+            return {"messages": [AIMessage(content="Uncited draft")]}
+
+    class FakeModel:
+        def invoke(self, messages: object) -> AIMessage:
+            observed_states.append(tracing_is_enabled())
+            return AIMessage(content="Revised answer. [S1]")
+
+    monkeypatch.setattr("agent_learn.adapters.create_agent", lambda **_kwargs: FakeAgent())
+    backend = LangChainAgentBackend(FakeModel())  # type: ignore[arg-type]
+
+    try:
+        answer = backend.answer("What is the API?", tools)
+        restored_state = tracing_is_enabled()
+    finally:
+        get_env_var.cache_clear()
+
+    assert answer == "Revised answer. [S1]"
+    assert observed_states == [False, False]
+    assert restored_state is True
+
+
+def test_synthetic_opt_in_sets_tracing_project_and_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tools = ResearchTools(OneResultSearch(), SuccessfulReader(), url_validator=lambda url: url)
+    observed_contexts: list[dict[str, object]] = []
+
+    class FakeAgent:
+        def invoke(self, payload: dict[str, object]) -> dict[str, object]:
+            observed_contexts.append(get_tracing_context())
+            return {"messages": [AIMessage(content="Synthetic answer")]}
+
+    monkeypatch.setattr("agent_learn.adapters.create_agent", lambda **_kwargs: FakeAgent())
+    backend = LangChainAgentBackend(  # type: ignore[arg-type]
+        object(), trace_enabled=True, trace_project="agent-learn-test"
+    )
+
+    answer = backend.answer("Synthetic case", tools)
+
+    assert answer == "Synthetic answer"
+    assert len(observed_contexts) == 1
+    assert observed_contexts[0]["enabled"] is True
+    assert observed_contexts[0]["project_name"] == "agent-learn-test"
+    assert observed_contexts[0]["tags"] == ["synthetic"]

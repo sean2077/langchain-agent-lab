@@ -3,12 +3,27 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 from typing import Protocol, TextIO
 
 from agent_learn.bootstrap import build_research_service
 from agent_learn.domain import ResearchReport, ResearchRequest
+
+_TERMINAL_CONTROL_PATTERN = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def strip_terminal_controls(value: str) -> str:
+    """Remove active terminal controls while preserving tabs, newlines, and text."""
+
+    return _TERMINAL_CONTROL_PATTERN.sub("", value)
+
+
+def escape_terminal_controls(value: str) -> str:
+    """Keep serialized data recoverable without emitting raw terminal controls."""
+
+    return _TERMINAL_CONTROL_PATTERN.sub(lambda match: f"\\u{ord(match.group()):04x}", value)
 
 
 class Researcher(Protocol):
@@ -29,15 +44,19 @@ def run_cli(
 
     report = service.research(ResearchRequest(question=" ".join(args.question)))
     if args.json:
-        stdout.write(report.model_dump_json(indent=2) + "\n")
+        stdout.write(escape_terminal_controls(report.model_dump_json(indent=2)) + "\n")
     else:
-        stdout.write(report.answer_markdown.rstrip() + "\n")
+        stdout.write(strip_terminal_controls(report.answer_markdown.rstrip()) + "\n")
         if report.sources:
             stdout.write("\nSources\n")
             for source in report.sources:
-                stdout.write(f"- [{source.source_id}] {source.title} — {source.url}\n")
+                stdout.write(
+                    strip_terminal_controls(
+                        f"- [{source.source_id}] {source.title} — {source.url}\n"
+                    )
+                )
     for warning in report.warnings:
-        stderr.write(f"warning: {warning}\n")
+        stderr.write(strip_terminal_controls(f"warning: {warning}\n"))
     return 0 if report.cited_source_ids else 2
 
 

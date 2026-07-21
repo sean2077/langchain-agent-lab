@@ -41,9 +41,31 @@ class FirstCaseRaises(PassingService):
     def research(self, request: ResearchRequest) -> ResearchReport:
         self.questions.append(request.question)
         if len(self.questions) == 1:
-            raise RuntimeError("synthetic case failure")
+            raise RuntimeError("synthetic\x1b[2J case failure")
         case = next(case for case in QUALITY_CASES if case.question == request.question)
         return passing_report(case)
+
+
+class TerminalControlService(PassingService):
+    def research(self, request: ResearchRequest) -> ResearchReport:
+        report = super().research(request)
+        controlled_source = report.sources[0].model_copy(
+            update={"title": f"{report.sources[0].title}\x1b]8;;hidden\x07"}
+        )
+        return report.model_copy(
+            update={
+                "answer_markdown": f"{report.answer_markdown}\x1b[2J",
+                "sources": [controlled_source, *report.sources[1:]],
+                "warnings": ["warning\roverwrite"],
+            }
+        )
+
+
+def has_terminal_control(value: str) -> bool:
+    return any(
+        (ord(character) < 32 and character not in "\t\n") or 0x7F <= ord(character) <= 0x9F
+        for character in value
+    )
 
 
 def run_with(service: PassingService) -> tuple[int, str, str]:
@@ -73,7 +95,18 @@ def test_quality_experiment_continues_after_one_case_raises() -> None:
     assert exit_code == 2
     assert len(service.questions) == 5
     assert "Automatic result: 4/5 passed" in stdout
-    assert "langchain-v1: synthetic case failure" in stderr
+    assert has_terminal_control(stderr) is False
+    assert "langchain-v1: synthetic[2J case failure" in stderr
+
+
+def test_quality_experiment_strips_terminal_controls_from_reports() -> None:
+    exit_code, stdout, stderr = run_with(TerminalControlService())
+
+    assert exit_code == 0
+    assert has_terminal_control(stdout) is False
+    assert has_terminal_control(stderr) is False
+    assert "Reviewed answer." in stdout
+    assert "warningoverwrite" in stderr
 
 
 def test_eval_entrypoint_keeps_hosted_tracing_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

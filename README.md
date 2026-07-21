@@ -15,6 +15,8 @@
   渲染，避免把搜索结果或异常内容解释成活动链接。
 - 无有效 citations 的 fail-closed 报告在 CLI 返回非零，并在 Streamlit 显示未完成/error 状态；
   失败答案与 warnings 仍会渲染，便于诊断。
+- CLI/eval 的 plain stdout/stderr 会剔除 ANSI/C0/C1 terminal controls（保留 tab/newline）；JSON
+  将残余控制字符转成标准 `\uXXXX` escape，不修改存储在 `ResearchReport` 中的数据。
 - 成功报告必须至少包含一个可引用正文 block，且每个正文段落、列表项和表格数据行都必须
   包含 `[S1]` 形式引用；标题、分隔线和 fenced code block 属于结构性豁免。未知、未成功
   读取或覆盖不完整的来源 id 会导致 fail-closed 报告；该检查证明引用可见且来源已读取，

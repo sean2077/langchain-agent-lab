@@ -9,6 +9,7 @@ from typing import Protocol, TextIO
 from urllib.parse import urlsplit
 
 from agent_learn.bootstrap import build_research_service
+from agent_learn.cli import strip_terminal_controls
 from agent_learn.domain import ResearchReport, ResearchRequest
 
 
@@ -130,15 +131,19 @@ def run_quality_experiment(*, service: Researcher, stdout: TextIO, stderr: TextI
             report = service.research(ResearchRequest(question=case.question))
         except Exception as exc:
             stdout.write("Automatic checks: FAIL (case execution failed)\n\n")
-            stderr.write(f"error: {case.case_id}: {exc}\n")
+            stderr.write(strip_terminal_controls(f"error: {case.case_id}: {exc}\n"))
             continue
 
         result = evaluate_report(case, report)
-        stdout.write(report.answer_markdown.rstrip() + "\n\n")
+        stdout.write(strip_terminal_controls(report.answer_markdown.rstrip()) + "\n\n")
         if report.sources:
             stdout.write("Sources\n")
             for source in report.sources:
-                stdout.write(f"- [{source.source_id}] {source.title} — {source.url}\n")
+                stdout.write(
+                    strip_terminal_controls(
+                        f"- [{source.source_id}] {source.title} — {source.url}\n"
+                    )
+                )
             stdout.write("\n")
 
         grounded_status = "PASS" if result.grounded_contract else "FAIL"
@@ -152,7 +157,7 @@ def run_quality_experiment(*, service: Researcher, stdout: TextIO, stderr: TextI
             f"required first-party evidence={source_status}\n\n"
         )
         for warning in report.warnings:
-            stderr.write(f"warning: {case.case_id}: {warning}\n")
+            stderr.write(strip_terminal_controls(f"warning: {case.case_id}: {warning}\n"))
         if result.passed:
             passed_count += 1
 

@@ -33,7 +33,10 @@
   裸 HTTP(S)、`www.`、email、`mailto:`、`xmpp:` 目标会被移除；默认不启用 HTML rendering，
   该规则不声称提供通用 HTML sanitization。
 - 每次 web search 在本地只登记并返回 provider 结果的前 5 条；该上限不依赖 provider 自行遵守，
-  也不限制独立预登记的核验后官方候选。
+  也不限制独立预登记的核验后官方候选。搜索与预登记候选进入模型可见 JSON 前，title 最多
+  500 字符、snippet 最多 2,000 字符；空 title 只用完整已验证 URL 的前 500 字符作显示 fallback，
+  URL identity 不截断。以上是 provider 返回后的字符边界，不声称限制响应字节、token 或
+  provider 内部分配。
 - 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
   data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性
   豁免。闭合或延伸到文末的 HTML comment 不可见，其中的标记不参与 citation identity 或

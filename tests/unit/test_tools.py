@@ -26,6 +26,16 @@ class OverReturningSearch(SearchProvider):
         ]
 
 
+class OverlongFieldSearch(SearchProvider):
+    long_url = "https://example.com/" + "u" * 600
+
+    def search(self, query: str, *, max_results: int) -> list[SearchHit]:
+        return [
+            SearchHit("  " + "T" * 600 + "  ", "https://example.com/a", "S" * 2_500),
+            SearchHit("   ", self.long_url, "short snippet"),
+        ]
+
+
 class Reader(PageReader):
     def read(self, url: str) -> Page:
         return Page("Fetched", url, "Readable page text", datetime.now(UTC))
@@ -67,6 +77,17 @@ def test_search_enforces_result_limit_when_provider_over_returns() -> None:
         "S5",
     ]
     assert tools.registered_source_ids == {"S1", "S2", "S3", "S4", "S5"}
+
+
+def test_search_bounds_model_visible_title_and_snippet_fields() -> None:
+    tools = ResearchTools(OverlongFieldSearch(), Reader(), url_validator=lambda url: url)
+
+    payload = json.loads(tools.search_web("query"))
+
+    assert payload["sources"][0]["title"] == "T" * 500
+    assert payload["sources"][0]["snippet"] == "S" * 2_000
+    assert payload["sources"][1]["url"] == OverlongFieldSearch.long_url
+    assert payload["sources"][1]["title"] == OverlongFieldSearch.long_url[:500]
 
 
 def test_register_sources_seeds_candidates_before_web_search() -> None:

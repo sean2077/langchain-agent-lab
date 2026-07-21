@@ -12,6 +12,9 @@ from agent_learn.security import UnsafeUrlError, validate_public_http_url
 
 UrlValidator = Callable[[str], str]
 
+_MAX_CANDIDATE_TITLE_CHARACTERS = 500
+_MAX_CANDIDATE_SNIPPET_CHARACTERS = 2_000
+
 
 @dataclass(frozen=True, slots=True)
 class _RegisteredSource:
@@ -77,9 +80,10 @@ class ResearchTools:
 
             source = self._sources_by_url.get(url)
             if source is None:
+                title = hit.title.strip()[:_MAX_CANDIDATE_TITLE_CHARACTERS]
                 source = _RegisteredSource(
                     source_id=f"S{len(self._sources_by_id) + 1}",
-                    title=hit.title.strip() or url,
+                    title=title or url[:_MAX_CANDIDATE_TITLE_CHARACTERS],
                     url=url,
                 )
                 self._sources_by_url[url] = source
@@ -89,7 +93,7 @@ class ResearchTools:
                     "source_id": source.source_id,
                     "title": source.title,
                     "url": source.url,
-                    "snippet": hit.snippet,
+                    "snippet": hit.snippet[:_MAX_CANDIDATE_SNIPPET_CHARACTERS],
                 }
             )
 

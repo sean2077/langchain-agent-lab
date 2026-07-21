@@ -128,7 +128,18 @@ class SuccessfulReader:
         return Page("Official docs", url, "Supported evidence", datetime.now(UTC))
 
 
-def test_agent_backend_repairs_missing_citations_once(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "draft",
+    [
+        "Uncited draft",
+        "Unsupported claim.\n\nSupported claim. [S1]",
+        "# Structural citation [S1]\n\n```text\n[S1]\n```",
+    ],
+)
+def test_agent_backend_repairs_incomplete_citation_coverage_once(
+    monkeypatch: pytest.MonkeyPatch,
+    draft: str,
+) -> None:
     tools = ResearchTools(OneResultSearch(), SuccessfulReader(), url_validator=lambda url: url)
     tools.search_web("official docs")
     tools.read_source("S1")
@@ -138,7 +149,7 @@ def test_agent_backend_repairs_missing_citations_once(monkeypatch: pytest.Monkey
     class FakeAgent:
         def invoke(self, payload: dict[str, object]) -> dict[str, object]:
             agent_invocations.append(payload)
-            return {"messages": [AIMessage(content="Uncited draft")]}
+            return {"messages": [AIMessage(content=draft)]}
 
     class FakeModel:
         def invoke(self, messages: object) -> AIMessage:

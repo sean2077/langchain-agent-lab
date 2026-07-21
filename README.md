@@ -8,7 +8,10 @@
   `localhost`、IPv4 loopback 或 IPv6 loopback 的 HTTP(S) endpoint，其他目标会在启动时拒绝；
   Ollama client 不继承系统 HTTP proxy。
 - Agent 只能搜索公网和读取已登记的来源，不能把任意 URL 直接交给读取工具。
-- 报告使用 `[S1]` 形式引用；未知或未成功读取的来源 id 会导致 fail-closed 报告。
+- 成功报告必须至少包含一个可引用正文 block，且每个正文段落、列表项和表格数据行都必须
+  包含 `[S1]` 形式引用；标题、分隔线和 fenced code block 属于结构性豁免。未知、未成功
+  读取或覆盖不完整的来源 id 会导致 fail-closed 报告；该检查证明引用可见且来源已读取，
+  不等同于语义蕴含证明。
 - LangChain 生态问题会先登记仓库内核验过的官方入口，但仍须真实读取成功后才能引用。
 - 模型生成的链接目标不会进入正文；常见 citation 格式偏差会规范化，必要时最多做一次无工具修订。
 - Clash/Mihomo Fake-IP 场景使用公共 DNS 再验证并固定到公网 IP，不直接放行 `198.18.0.0/15`。

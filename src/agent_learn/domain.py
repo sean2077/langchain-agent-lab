@@ -16,12 +16,131 @@ _BARE_CITATION_PATTERN = re.compile(
 _INLINE_LINK_PATTERN = re.compile(r"(?<!\\)!?\[([^\]\n]*)\]\((?:[^()\n]|\([^()\n]*\))*\)")
 _REFERENCE_LINK_PATTERN = re.compile(r"(?<!\\)!?\[([^\]\n]*)\]\[[^\]\n]*\]")
 _REFERENCE_DEFINITION_PATTERN = re.compile(r"(?m)^[ \t]{0,3}\[[^\]\n]+\]:[ \t]+\S+[^\n]*$")
+_ATX_HEADING_PATTERN = re.compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]+|$)")
+_SETEXT_HEADING_PATTERN = re.compile(r"^[ \t]{0,3}(?:=+|-+)[ \t]*$")
+_THEMATIC_BREAK_PATTERN = re.compile(
+    r"^[ \t]{0,3}(?:(?:\*[ \t]*){3,}|(?:_[ \t]*){3,}|(?:-[ \t]*){3,})$"
+)
+_FENCE_PATTERN = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+_LIST_ITEM_PATTERN = re.compile(r"^[ \t]*(?:[-+*]|\d+[.)])[ \t]+")
+_TABLE_SEPARATOR_PATTERN = re.compile(
+    r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*$"
+)
 
 
 def extract_citation_ids(markdown: str) -> list[str]:
     """Return unique citation ids in first-seen order."""
 
     return list(dict.fromkeys(_CITATION_PATTERN.findall(markdown)))
+
+
+def count_uncited_content_blocks(markdown: str) -> int:
+    """Count prose, list items and table rows without a canonical citation.
+
+    This is a deliberately syntactic coverage check, not a claim-support or
+    entailment evaluator. Markdown headings, separators and fenced code are
+    structural and therefore excluded.
+    """
+
+    return sum(not extract_citation_ids(block) for block in _citation_content_blocks(markdown))
+
+
+def has_citable_content(markdown: str) -> bool:
+    """Return whether Markdown contains prose, a list item or a table data row."""
+
+    return bool(_citation_content_blocks(markdown))
+
+
+def _citation_content_blocks(markdown: str) -> list[str]:
+    lines = markdown.splitlines()
+    blocks: list[str] = []
+    current: list[str] = []
+    current_is_list_item = False
+    fence_character = ""
+    fence_length = 0
+    in_table = False
+
+    def flush_current() -> None:
+        nonlocal current_is_list_item
+        if current:
+            blocks.append("\n".join(current))
+            current.clear()
+        current_is_list_item = False
+
+    index = 0
+    while index < len(lines):
+        stripped = lines[index].strip()
+
+        if fence_character:
+            if len(stripped) >= fence_length and set(stripped) == {fence_character}:
+                fence_character = ""
+                fence_length = 0
+            index += 1
+            continue
+
+        fence_match = _FENCE_PATTERN.match(lines[index])
+        if fence_match:
+            flush_current()
+            delimiter = fence_match.group(1)
+            fence_character = delimiter[0]
+            fence_length = len(delimiter)
+            in_table = False
+            index += 1
+            continue
+
+        if not stripped:
+            flush_current()
+            in_table = False
+            index += 1
+            continue
+
+        next_stripped = lines[index + 1].strip() if index + 1 < len(lines) else ""
+        if (
+            not current_is_list_item
+            and not _LIST_ITEM_PATTERN.match(lines[index])
+            and "|" in stripped
+            and _TABLE_SEPARATOR_PATTERN.fullmatch(next_stripped)
+        ):
+            flush_current()
+            in_table = True
+            index += 2
+            continue
+
+        if (
+            not current_is_list_item
+            and not _LIST_ITEM_PATTERN.match(lines[index])
+            and _SETEXT_HEADING_PATTERN.fullmatch(next_stripped)
+        ):
+            current.clear()
+            current_is_list_item = False
+            in_table = False
+            index += 2
+            continue
+
+        if in_table:
+            if "|" in stripped:
+                blocks.append(stripped)
+                index += 1
+                continue
+            in_table = False
+
+        if (
+            _ATX_HEADING_PATTERN.match(lines[index])
+            or _THEMATIC_BREAK_PATTERN.fullmatch(lines[index])
+            or _TABLE_SEPARATOR_PATTERN.fullmatch(lines[index])
+        ):
+            flush_current()
+            index += 1
+            continue
+
+        if _LIST_ITEM_PATTERN.match(lines[index]):
+            flush_current()
+            current_is_list_item = True
+        current.append(stripped)
+        index += 1
+
+    flush_current()
+    return blocks
 
 
 def normalize_citation_markers(markdown: str) -> tuple[str, int]:
@@ -109,9 +228,17 @@ class ResearchReport(BaseModel):
         if duplicates:
             raise ValueError(f"duplicate source ids: {', '.join(duplicates)}")
 
-        unknown = sorted(set(self.cited_source_ids) - set(source_ids))
+        cited_source_ids = self.cited_source_ids
+        unknown = sorted(set(cited_source_ids) - set(source_ids))
         if unknown:
             raise ValueError(f"unknown source ids: {', '.join(unknown)}")
+
+        if cited_source_ids:
+            if not has_citable_content(self.answer_markdown):
+                raise ValueError("answer contains no citable content block")
+            uncited_content_blocks = count_uncited_content_blocks(self.answer_markdown)
+            if uncited_content_blocks:
+                raise ValueError(f"{uncited_content_blocks} uncited content block(s)")
         return self
 
     @property

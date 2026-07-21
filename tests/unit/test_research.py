@@ -67,6 +67,13 @@ class LinkedBackend(AgentBackend):
         return "旧功能迁移至 [langchain-classic](file:///tmp/generated-reference.py#L1-L2) [S1]"
 
 
+class PartiallyGroundedBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.search_web("LangChain v1")
+        tools.read_source("S1")
+        return "LangChain 适合所有生产工作负载。\n\nLangChain v1 的标准入口是 `create_agent`。[S1]"
+
+
 def test_research_service_returns_grounded_report() -> None:
     service = ResearchService(
         FakeSearch(), FakeReader(), GroundedBackend(), url_validator=lambda url: url
@@ -134,3 +141,14 @@ def test_research_service_removes_model_generated_link_targets() -> None:
     assert report.answer_markdown == "旧功能迁移至 langchain-classic [S1]"
     assert "file://" not in report.answer_markdown
     assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
+
+
+def test_research_service_fails_closed_on_uncited_content_block() -> None:
+    service = ResearchService(
+        FakeSearch(), FakeReader(), PartiallyGroundedBackend(), url_validator=lambda url: url
+    )
+
+    report = service.research(ResearchRequest(question="LangChain 是什么？"))
+
+    assert report.cited_source_ids == []
+    assert any("uncited content block" in warning for warning in report.warnings)

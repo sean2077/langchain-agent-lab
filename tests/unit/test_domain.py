@@ -7,6 +7,7 @@ from agent_learn.domain import (
     ResearchReport,
     ResearchRequest,
     Source,
+    count_uncited_content_blocks,
     extract_citation_ids,
     normalize_citation_markers,
     remove_markdown_link_targets,
@@ -36,6 +37,67 @@ def test_research_request_rejects_blank_question(question: str) -> None:
 
 def test_extract_citation_ids_preserves_first_seen_order() -> None:
     assert extract_citation_ids("One [S2], two [S1], repeat [S2].") == ["S2", "S1"]
+
+
+def test_count_uncited_content_blocks_checks_prose_and_list_items() -> None:
+    markdown = """# Summary
+
+Grounded paragraph. [S1]
+
+Ungrounded paragraph.
+
+- Grounded item. [S1]
+  Continuation of the grounded item.
+- Ungrounded item.
+  Continuation of the ungrounded item.
+
+Code example
+------------
+
+```python
+print("fenced code does not need a citation")
+```
+"""
+
+    assert count_uncited_content_blocks(markdown) == 2
+
+
+def test_count_uncited_content_blocks_checks_table_data_rows() -> None:
+    markdown = """| Claim | Result |
+| :--- | ---: |
+| Grounded | Yes [S1] |
+| Ungrounded | No |
+"""
+
+    assert count_uncited_content_blocks(markdown) == 1
+
+
+def test_count_uncited_content_blocks_checks_nested_list_items() -> None:
+    markdown = """- Grounded parent. [S1]
+    - Ungrounded nested item.
+"""
+
+    assert count_uncited_content_blocks(markdown) == 1
+
+
+def test_thematic_break_does_not_exempt_preceding_list_item() -> None:
+    markdown = """- Ungrounded item.
+---
+
+Grounded paragraph. [S1]
+"""
+
+    assert count_uncited_content_blocks(markdown) == 1
+
+
+def test_table_separator_does_not_exempt_preceding_list_item() -> None:
+    markdown = """- Ungrounded item | detail
+| --- | --- |
+
+Grounded paragraph. [S1]
+"""
+
+    assert count_uncited_content_blocks(markdown) == 1
 
 
 def test_normalize_citation_markers_canonicalizes_common_model_variants() -> None:
@@ -69,6 +131,22 @@ def test_report_rejects_unknown_citation() -> None:
     with pytest.raises(ValidationError, match="unknown source ids: S2"):
         ResearchReport(
             answer_markdown="Unsupported claim. [S2]",
+            sources=[make_source()],
+        )
+
+
+def test_report_rejects_uncited_content_block_when_citations_are_present() -> None:
+    with pytest.raises(ValidationError, match="uncited content block"):
+        ResearchReport(
+            answer_markdown="Unsupported claim.\n\nSupported claim. [S1]",
+            sources=[make_source()],
+        )
+
+
+def test_report_rejects_citations_only_in_structural_blocks() -> None:
+    with pytest.raises(ValidationError, match="no citable content block"):
+        ResearchReport(
+            answer_markdown="# Summary [S1]\n\n```text\n[S1]\n```",
             sources=[make_source()],
         )
 

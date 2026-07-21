@@ -14,6 +14,10 @@
 - `Source` 包含 `source_id`、`title`、`url`、`retrieved_at`。
 - `ResearchReport` 包含 `answer_markdown`、`sources`、`warnings`。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。
+- 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
+  data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性
+  豁免。该确定性规则验证 citation coverage 与 source identity，不声称验证引用内容在语义上
+  支持对应陈述。
 - 核心生态问题优先登记核验过的官方入口，但目录登记不等于可信引用，仍须通过相同公网读取边界。
 - Streamlit 只绑定 `127.0.0.1`；CLI 调用同一个核心接口。
 - LangSmith 只允许在专用合成测试配置中启用，正常 UI 默认关闭。

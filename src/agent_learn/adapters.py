@@ -19,7 +19,9 @@ from langsmith import tracing_context
 
 from agent_learn.catalog import official_sources_for
 from agent_learn.domain import (
+    count_uncited_content_blocks,
     extract_citation_ids,
+    has_citable_content,
     normalize_citation_markers,
     remove_markdown_link_targets,
 )
@@ -238,20 +240,28 @@ class LangChainAgentBackend(AgentBackend):
             answer = _message_text(messages[-1])
 
             read_source_ids = tools.read_source_ids
-            cited_source_ids = _normalized_citation_ids(answer)
+            grounding_markdown = _normalized_grounding_markdown(answer)
+            cited_source_ids = set(extract_citation_ids(grounding_markdown))
+            has_citable_block = has_citable_content(grounding_markdown)
+            uncited_content_blocks = count_uncited_content_blocks(grounding_markdown)
             language_mismatch = _chinese_language_mismatch(question, answer)
             if read_source_ids and (
-                not cited_source_ids or not cited_source_ids <= read_source_ids or language_mismatch
+                not cited_source_ids
+                or not cited_source_ids <= read_source_ids
+                or not has_citable_block
+                or uncited_content_blocks
+                or language_mismatch
             ):
                 allowed = ", ".join(f"[{source_id}]" for source_id in sorted(read_source_ids))
                 language_instruction = (
                     " Write the revised answer in Chinese." if language_mismatch else ""
                 )
                 revision = (
-                    "Rewrite your draft without adding any facts. Every factual paragraph "
-                    "or bullet must end with at least one exact source marker chosen only "
-                    f"from: {allowed}. Omit claims that these sources do not support. "
-                    "Do not output links or a source list."
+                    "Rewrite your draft without adding any facts. Every prose paragraph, "
+                    "list item, or table data row must end with at least one exact source "
+                    f"marker chosen only from: {allowed}. Headings, separators, and fenced "
+                    "code blocks do not need markers. Omit claims that these sources do not "
+                    "support. Do not output links or a source list."
                     f"{language_instruction} Return only the revised Markdown answer."
                 )
                 revised_message = self._model.invoke(
@@ -267,10 +277,10 @@ class LangChainAgentBackend(AgentBackend):
         return answer
 
 
-def _normalized_citation_ids(markdown: str) -> set[str]:
+def _normalized_grounding_markdown(markdown: str) -> str:
     without_links, _ = remove_markdown_link_targets(markdown)
     normalized, _ = normalize_citation_markers(without_links)
-    return set(extract_citation_ids(normalized))
+    return normalized
 
 
 def _chinese_language_mismatch(question: str, answer: str) -> bool:

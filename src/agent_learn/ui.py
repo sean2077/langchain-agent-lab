@@ -18,17 +18,16 @@ def _default_service() -> Researcher:
     return build_research_service(trace_enabled=False)
 
 
-def _escape_markdown(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
-
-
 def _render_report(report: ResearchReport) -> None:
     st.markdown(report.answer_markdown)
     if report.sources:
         st.markdown("#### 来源")
         for source in report.sources:
-            title = _escape_markdown(source.title)
-            st.markdown(f"- `[{source.source_id}]` [{title}]({source.url})")
+            st.link_button(
+                f"[{source.source_id}] {source.title}",
+                source.url,
+                type="tertiary",
+            )
     for warning in report.warnings:
         st.warning(warning)
 

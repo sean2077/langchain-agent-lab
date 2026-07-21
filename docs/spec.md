@@ -15,6 +15,7 @@
   再次通过公网校验后创建；其元数据来自实际读取的最终页面，而不是搜索结果或登记时间。
 - `ResearchReport` 包含 `answer_markdown`、`sources`、`warnings`；`sources` 只列成功读取
   的页面，不包含未读搜索候选。
+- Streamlit 使用参数化链接组件渲染来源，已验证 URL 不进入 Markdown destination 字符串。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。
 - 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
   data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性

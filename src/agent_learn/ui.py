@@ -72,7 +72,7 @@ def run_app() -> None:
                 st.error("研究流程失败，详情如下：")
                 st.code(str(exc), language=None, wrap_lines=True)
                 return
-            if report.cited_source_ids:
+            if report.is_source_grounded:
                 status.update(label="研究完成", state="complete", expanded=False)
             else:
                 status.update(label="研究未完成", state="error", expanded=False)

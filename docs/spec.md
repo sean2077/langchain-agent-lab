@@ -13,12 +13,14 @@
 - `ResearchRequest` 包含 `question`。
 - `Source` 包含 `source_id`、`title`、`url`、`retrieved_at`，只在页面成功读取且最终 URL
   再次通过公网校验后创建；其元数据来自实际读取的最终页面，而不是搜索结果或登记时间。
-- `ResearchReport` 包含 `answer_markdown`、`sources`、`warnings`；`sources` 只列成功读取
-  的页面，不包含未读搜索候选。
+- `ResearchReport` 包含 `answer_markdown`、稳定的 `outcome`、`sources`、`warnings`；
+  `outcome` 区分 `source_grounded`、`agent_error`、`insufficient_evidence` 与
+  `invalid_report`，`sources` 只列成功读取的页面，不包含未读搜索候选。
 - Streamlit 使用参数化链接组件渲染来源，已验证 URL 不进入 Markdown destination 字符串。
 - Streamlit warning/error 的 severity 文案固定，上游诊断详情只进入非 Markdown code element。
-- CLI 与 Streamlit 共享报告成功语义：只有包含有效 citations 的报告才标记成功；fail-closed
-  报告保留答案与 warnings，但 CLI 返回非零、UI 标记未完成/error。
+- CLI、Streamlit 与 eval 共享 domain outcome：只有 `source_grounded` 才标记成功，且 domain
+  强制它包含有效 citations；fail-closed 报告保留答案与 warnings，但 CLI 返回非零、UI 标记
+  未完成/error。
 - CLI/eval 在 terminal sink 剔除 active C0/C1 controls（保留 tab/newline）；JSON sink 将残余
   controls 序列化为 `\uXXXX`，domain report 本身保持不变。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。

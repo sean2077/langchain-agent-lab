@@ -15,8 +15,9 @@
 - Streamlit 来源链接通过分离的 label/URL 参数渲染，来源 URL 不会拼接进 Markdown 语法。
 - Streamlit warning/error 使用固定 alert 文案，并把上游诊断详情作为非 Markdown code text
   渲染，避免把搜索结果或异常内容解释成活动链接。
-- 无有效 citations 的 fail-closed 报告在 CLI 返回非零，并在 Streamlit 显示未完成/error 状态；
-  失败答案与 warnings 仍会渲染，便于诊断。
+- `ResearchReport.outcome` 提供稳定的 terminal category；domain 只允许带有效 citations 的
+  `source_grounded` 结果，CLI/UI/eval 共享该判断。fail-closed 报告在 CLI 返回非零、在
+  Streamlit 显示未完成/error，并保留答案与详细 warnings。
 - CLI/eval 的 plain stdout/stderr 会剔除 ANSI/C0/C1 terminal controls（保留 tab/newline）；JSON
   将残余控制字符转成标准 `\uXXXX` escape，不修改存储在 `ResearchReport` 中的数据。
 - 成功报告必须至少包含一个可引用正文 block，且每个正文段落、列表项和表格数据行都必须

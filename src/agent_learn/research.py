@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pydantic import ValidationError
 
 from agent_learn.domain import (
+    ResearchOutcome,
     ResearchReport,
     ResearchRequest,
     Source,
@@ -45,7 +46,9 @@ class ResearchService:
             answer = self._agent_backend.answer(request.question, tools).strip()
         except Exception as exc:
             return self._failed_report(
-                tools.read_sources, [*tools.warnings, f"agent failed: {exc}"]
+                tools.read_sources,
+                [*tools.warnings, f"agent failed: {exc}"],
+                ResearchOutcome.AGENT_ERROR,
             )
 
         answer, removed_link_count = remove_markdown_link_targets(answer)
@@ -61,7 +64,11 @@ class ResearchService:
             )
 
         if not tools.registered_source_ids:
-            return self._failed_report([], [*report_warnings, "agent collected no sources"])
+            return self._failed_report(
+                [],
+                [*report_warnings, "agent collected no sources"],
+                ResearchOutcome.INSUFFICIENT_EVIDENCE,
+            )
 
         cited_source_ids = extract_citation_ids(answer)
         unknown_source_ids = sorted(set(cited_source_ids) - tools.registered_source_ids)
@@ -73,12 +80,14 @@ class ResearchService:
                     f"report validation failed: unknown source ids: "
                     f"{', '.join(unknown_source_ids)}",
                 ],
+                ResearchOutcome.INVALID_REPORT,
             )
 
         if not cited_source_ids:
             return self._failed_report(
                 tools.read_sources,
                 [*report_warnings, "model response contained no source citations"],
+                ResearchOutcome.INSUFFICIENT_EVIDENCE,
             )
 
         unread_source_ids = sorted(set(cited_source_ids) - tools.read_source_ids)
@@ -89,11 +98,13 @@ class ResearchService:
                     *report_warnings,
                     f"model cited unread sources: {', '.join(unread_source_ids)}",
                 ],
+                ResearchOutcome.INVALID_REPORT,
             )
 
         try:
             return ResearchReport(
                 answer_markdown=answer,
+                outcome=ResearchOutcome.SOURCE_GROUNDED,
                 sources=tools.read_sources,
                 warnings=report_warnings,
             )
@@ -102,12 +113,18 @@ class ResearchService:
             return self._failed_report(
                 tools.read_sources,
                 [*report_warnings, f"report validation failed: {concise_error}"],
+                ResearchOutcome.INVALID_REPORT,
             )
 
     @staticmethod
-    def _failed_report(sources: list[Source], warnings: list[str]) -> ResearchReport:
+    def _failed_report(
+        sources: list[Source],
+        warnings: list[str],
+        outcome: ResearchOutcome,
+    ) -> ResearchReport:
         return ResearchReport(
             answer_markdown=_FAIL_CLOSED_ANSWER,
+            outcome=outcome,
             sources=sources,
             warnings=list(dict.fromkeys(warnings)),
         )

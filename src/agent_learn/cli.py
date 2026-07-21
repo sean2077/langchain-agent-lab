@@ -57,7 +57,7 @@ def run_cli(
                 )
     for warning in report.warnings:
         stderr.write(strip_terminal_controls(f"warning: {warning}\n"))
-    return 0 if report.cited_source_ids else 2
+    return 0 if report.is_source_grounded else 2
 
 
 def main() -> None:

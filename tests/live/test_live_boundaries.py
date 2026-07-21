@@ -96,4 +96,4 @@ def test_hosted_langsmith_synthetic_trace() -> None:
         ResearchRequest(question=SYNTHETIC_CASES["tool-selection"])
     )
 
-    assert report.cited_source_ids
+    assert report.is_source_grounded

@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from io import StringIO
 
 from agent_learn.cli import run_cli
-from agent_learn.domain import ResearchReport, ResearchRequest, Source
+from agent_learn.domain import ResearchOutcome, ResearchReport, ResearchRequest, Source
 
 
 class SuccessfulService:
@@ -26,6 +26,7 @@ class FailedService:
     def research(self, request: ResearchRequest) -> ResearchReport:
         return ResearchReport(
             answer_markdown="无法生成有来源支持的研究报告。",
+            outcome=ResearchOutcome.INSUFFICIENT_EVIDENCE,
             warnings=["Search failed"],
         )
 
@@ -79,6 +80,18 @@ def test_cli_returns_nonzero_for_fail_closed_report() -> None:
     assert "Search failed" in stderr.getvalue()
 
 
+def test_cli_json_serializes_failure_outcome() -> None:
+    stdout = StringIO()
+    stderr = StringIO()
+
+    exit_code = run_cli(
+        ["--json", "question"], service=FailedService(), stdout=stdout, stderr=stderr
+    )
+
+    assert exit_code == 2
+    assert json.loads(stdout.getvalue())["outcome"] == "insufficient_evidence"
+
+
 def test_cli_strips_terminal_controls_from_plain_output() -> None:
     stdout = StringIO()
     stderr = StringIO()
@@ -111,5 +124,6 @@ def test_cli_json_escapes_terminal_controls() -> None:
     assert "\\u001b" in stdout.getvalue()
     assert "\\u009b" in stdout.getvalue()
     decoded = json.loads(stdout.getvalue())
+    assert decoded["outcome"] == "source_grounded"
     assert decoded["answer_markdown"] == "Visible answer\x1b[2J. [S1]"
     assert decoded["sources"][0]["url"] == "https://example.com/\x9b31m"

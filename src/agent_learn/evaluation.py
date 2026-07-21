@@ -111,7 +111,7 @@ def evaluate_report(case: QualityCase, report: ResearchReport) -> QualityCaseRes
         )
     )
     return QualityCaseResult(
-        grounded_contract=bool(cited_source_ids),
+        grounded_contract=report.is_source_grounded,
         missing_source_requirements=missing_requirements,
     )
 

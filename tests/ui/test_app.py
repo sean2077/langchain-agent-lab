@@ -3,7 +3,7 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
-from agent_learn.domain import ResearchReport, ResearchRequest, Source
+from agent_learn.domain import ResearchOutcome, ResearchReport, ResearchRequest, Source
 
 APP_PATH = Path(__file__).parents[2] / "streamlit_app.py"
 
@@ -27,6 +27,7 @@ class WarningService:
     def research(self, request: ResearchRequest) -> ResearchReport:
         return ResearchReport(
             answer_markdown="无法生成有来源支持的研究报告。",
+            outcome=ResearchOutcome.INSUFFICIENT_EVIDENCE,
             warnings=["Search failed"],
         )
 
@@ -60,6 +61,7 @@ class MarkdownDiagnosticService:
     def research(self, request: ResearchRequest) -> ResearchReport:
         return ResearchReport(
             answer_markdown="无法生成有来源支持的研究报告。",
+            outcome=ResearchOutcome.INVALID_REPORT,
             warnings=[self.payload],
         )
 

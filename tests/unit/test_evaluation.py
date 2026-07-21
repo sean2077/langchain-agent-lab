@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from agent_learn.domain import ResearchReport, Source
+from agent_learn.domain import ResearchOutcome, ResearchReport, Source
 from agent_learn.evaluation import QUALITY_CASES, evaluate_report
 
 
@@ -76,7 +76,10 @@ def test_code_evaluator_rejects_a_different_page_with_matching_path_prefix() -> 
 def test_code_evaluator_rejects_fail_closed_report() -> None:
     result = evaluate_report(
         QUALITY_CASES[0],
-        ResearchReport(answer_markdown="无法生成有来源支持的研究报告。"),
+        ResearchReport(
+            answer_markdown="无法生成有来源支持的研究报告。",
+            outcome=ResearchOutcome.INSUFFICIENT_EVIDENCE,
+        ),
     )
 
     assert result.grounded_contract is False

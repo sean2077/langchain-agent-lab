@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -199,12 +200,22 @@ class Source(BaseModel):
     retrieved_at: datetime
 
 
+class ResearchOutcome(StrEnum):
+    """Stable terminal category; warnings retain implementation-level detail."""
+
+    SOURCE_GROUNDED = "source_grounded"
+    AGENT_ERROR = "agent_error"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    INVALID_REPORT = "invalid_report"
+
+
 class ResearchReport(BaseModel):
-    """A source-grounded answer safe for CLI and UI rendering."""
+    """A validated terminal result shared by research interfaces."""
 
     model_config = ConfigDict(frozen=True)
 
     answer_markdown: str = Field(min_length=1)
+    outcome: ResearchOutcome = ResearchOutcome.SOURCE_GROUNDED
     sources: list[Source] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -239,8 +250,17 @@ class ResearchReport(BaseModel):
             uncited_content_blocks = count_uncited_content_blocks(self.answer_markdown)
             if uncited_content_blocks:
                 raise ValueError(f"{uncited_content_blocks} uncited content block(s)")
+
+        if self.is_source_grounded and not cited_source_ids:
+            raise ValueError("source-grounded outcome requires citations")
+        if not self.is_source_grounded and cited_source_ids:
+            raise ValueError("failure outcome cannot contain citations")
         return self
 
     @property
     def cited_source_ids(self) -> list[str]:
         return extract_citation_ids(self.answer_markdown)
+
+    @property
+    def is_source_grounded(self) -> bool:
+        return self.outcome is ResearchOutcome.SOURCE_GROUNDED

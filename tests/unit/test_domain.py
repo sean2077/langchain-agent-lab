@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_learn.domain import (
+    ResearchOutcome,
     ResearchReport,
     ResearchRequest,
     Source,
@@ -125,6 +126,11 @@ def test_report_accepts_known_citations() -> None:
     )
 
     assert report.cited_source_ids == ["S1"]
+    assert report.outcome is ResearchOutcome.SOURCE_GROUNDED
+    assert report.is_source_grounded is True
+    payload = report.model_dump(mode="json")
+    assert payload["outcome"] == "source_grounded"
+    assert ResearchReport.model_validate(payload).outcome is ResearchOutcome.SOURCE_GROUNDED
 
 
 def test_report_rejects_unknown_citation() -> None:
@@ -178,8 +184,24 @@ def test_report_rejects_duplicate_source_ids() -> None:
 def test_fail_closed_report_can_have_no_sources() -> None:
     report = ResearchReport(
         answer_markdown="No source-backed answer is available.",
+        outcome=ResearchOutcome.INSUFFICIENT_EVIDENCE,
         warnings=["Search failed"],
     )
 
     assert report.sources == []
     assert report.cited_source_ids == []
+    assert report.is_source_grounded is False
+
+
+def test_report_rejects_source_grounded_outcome_without_citations() -> None:
+    with pytest.raises(ValidationError, match="source-grounded outcome requires citations"):
+        ResearchReport(answer_markdown="No source-backed answer is available.")
+
+
+def test_report_rejects_failure_outcome_with_citations() -> None:
+    with pytest.raises(ValidationError, match="failure outcome cannot contain citations"):
+        ResearchReport(
+            answer_markdown="Grounded answer. [S1]",
+            outcome=ResearchOutcome.INVALID_REPORT,
+            sources=[make_source()],
+        )

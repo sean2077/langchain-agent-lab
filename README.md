@@ -133,7 +133,8 @@ uv run --extra dev pytest tests/live/test_live_boundaries.py -k end_to_end_quali
 
 - Hosted LangSmith trace 必须由用户提供有效 `LANGSMITH_API_KEY`；没有 key 时明确退出或跳过。
 - 页面读取为防 DNS 重绑定而直连并固定到已验证公网 IP；支持本机 Mihomo/Clash TUN Fake-IP，但仅允许显式 HTTP proxy、禁止直连公网的网络会 fail closed。
-- 5 题自动来源与引用检查已完成；“可直接使用”仍由用户在质量门槛文档中确认。
+- 仓库只记录了 2026-07-18 的历史 5/5 结构证据，不将其视为当前回归；每个 checkout
+  仍需重跑 `agent-learn-eval`，人工语义支持与“可直接使用”结论须按质量门槛逐题记录。
 
 ## 代码结构
 

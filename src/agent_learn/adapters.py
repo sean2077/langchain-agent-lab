@@ -53,6 +53,7 @@ Rules:
 """
 
 _CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+_AGENT_RECURSION_LIMIT = 100
 
 
 class DuckDuckGoSearchProvider:
@@ -259,7 +260,10 @@ class LangChainAgentBackend(AgentBackend):
             project_name=self._trace_project if self._trace_enabled else None,
             tags=["synthetic"] if self._trace_enabled else None,
         ):
-            result = agent.invoke({"messages": [{"role": "user", "content": user_content}]})
+            result = agent.invoke(
+                {"messages": [{"role": "user", "content": user_content}]},
+                config={"recursion_limit": _AGENT_RECURSION_LIMIT},
+            )
             messages = result.get("messages", [])
             if not messages:
                 raise ValueError("agent returned no messages")

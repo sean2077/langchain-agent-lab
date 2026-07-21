@@ -9,6 +9,9 @@
   Ollama client 不继承系统 HTTP proxy。transport 的 connect/read/write/pool timeout 默认
   为 300 秒，可通过正有限值 `OLLAMA_TIMEOUT_SECONDS` 调整；研究主路径把传输超时纳入
   既有 fail-closed，但这不是整个 Agent run 的硬 wall-clock deadline。
+- 主 LangGraph Agent 每次执行显式限制为 100 个 super-step，不继承依赖默认值；达到上限会
+  通过既有异常边界返回 `agent_error`。它限制图循环次数，不等于 100 次工具调用，也不能中断
+  单个慢节点、单次额外修订或保证总耗时。
 - Agent 只能搜索公网和读取已登记的候选，不能把任意 URL 直接交给读取工具。搜索候选与
   已读证据分开保存；报告只列出成功读取的页面，并使用重定向后再次通过公网校验的最终
   URL、实际页面标题的最多 500 字符前缀和真实读取时间；空标题以最终 URL 的最多 500 字符

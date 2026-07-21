@@ -385,6 +385,30 @@ class SuccessfulReader:
         return Page("Official docs", url, "Supported evidence", datetime.now(UTC))
 
 
+def test_agent_backend_sets_explicit_graph_recursion_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_configs: list[dict[str, object] | None] = []
+
+    class FakeAgent:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            observed_configs.append(config)
+            return {"messages": [AIMessage(content="Short answer")]}
+
+    monkeypatch.setattr("agent_learn.adapters.create_agent", lambda **_kwargs: FakeAgent())
+    backend = LangChainAgentBackend(object())  # type: ignore[arg-type]
+    tools = ResearchTools(OneResultSearch(), SuccessfulReader(), url_validator=lambda url: url)
+
+    answer = backend.answer("What is the API?", tools)
+
+    assert answer == "Short answer"
+    assert observed_configs == [{"recursion_limit": 100}]
+
+
 @pytest.mark.parametrize(
     "draft",
     [
@@ -406,7 +430,12 @@ def test_agent_backend_repairs_incomplete_citation_coverage_once(
     model_invocations: list[object] = []
 
     class FakeAgent:
-        def invoke(self, payload: dict[str, object]) -> dict[str, object]:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            assert config == {"recursion_limit": 100}
             agent_invocations.append(payload)
             return {"messages": [AIMessage(content=draft)]}
 
@@ -436,7 +465,12 @@ def test_agent_backend_repairs_language_for_chinese_question(
     model_invocations: list[object] = []
 
     class FakeAgent:
-        def invoke(self, payload: dict[str, object]) -> dict[str, object]:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            assert config == {"recursion_limit": 100}
             return {"messages": [AIMessage(content="English answer [S1]")]}
 
     class FakeModel:
@@ -465,7 +499,12 @@ def test_normal_agent_and_repair_override_globally_enabled_tracing(
     observed_states: list[bool | str] = []
 
     class FakeAgent:
-        def invoke(self, payload: dict[str, object]) -> dict[str, object]:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            assert config == {"recursion_limit": 100}
             observed_states.append(tracing_is_enabled())
             return {"messages": [AIMessage(content="Uncited draft")]}
 
@@ -495,7 +534,12 @@ def test_synthetic_opt_in_sets_tracing_project_and_tag(
     observed_contexts: list[dict[str, object]] = []
 
     class FakeAgent:
-        def invoke(self, payload: dict[str, object]) -> dict[str, object]:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            assert config == {"recursion_limit": 100}
             observed_contexts.append(get_tracing_context())
             return {"messages": [AIMessage(content="Synthetic answer")]}
 

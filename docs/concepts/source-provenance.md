@@ -71,6 +71,22 @@ Location: http://127.0.0.1:11434/api/tags
 所以成功读取后，原来的 `S#` 身份保持稳定，但 `Source.title`、`Source.url` 和
 `Source.retrieved_at` 来自最终页面，而不是搜索结果。未读候选不会出现在报告来源列表中。
 
+#### 标题是证据元数据，不是可信 UI 标记
+
+实际页面标题由远端站点控制。报告应原样保存它，才能准确描述读取时观察到的 provenance；
+但“保存原值”不表示可以把它原样送入每个渲染器。[Streamlit `st.link_button` 文档](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
+明确说明 `label` 支持 GFM Links 和 Images，因此即使真正的 `Source.url` 已放在独立 `url`
+参数中，下面这个标题仍会给 label 引入第二个活动目标：
+
+```text
+Official [injected](https://attacker.example) ![pixel](https://tracker.example/p.gif)
+```
+
+UI 在构造来源按钮 label 时，对 `Source.title` 应用与答案正文相同的活动目标移除规则，只保留
+可见 label 文本；如果标题只由目标组成，使用固定的 `Source`。按钮的 `url` 参数仍是经过验证
+的最终来源 URL，`ResearchReport`、JSON 和 CLI 中的原始标题都不改变。这是面向具体 GFM sink
+的输出编码，不是对 provenance 的改写，也不声称提供通用 HTML sanitization。
+
 ### 3. 读取器与领域边界做了纵深校验
 
 页面读取器会逐跳验证目标；`ResearchTools.read_source` 收到 `Page` 后还会对
@@ -94,6 +110,8 @@ Location: http://127.0.0.1:11434/api/tags
 - [`tools.py`](../../src/agent_learn/tools.py)：请求内候选登记、按 ID 读取、最终 URL 校验与已读集合。
 - [`adapters.py`](../../src/agent_learn/adapters.py)：关闭自动重定向、逐跳验证、IP pinning 与页面解析。
 - [`security.py`](../../src/agent_learn/security.py)：公网地址、DNS、Fake-IP 和 URL 安全规则。
+- [`ui.py`](../../src/agent_learn/ui.py)：来源标题的 GFM destination 移除与参数化来源按钮。
 - [`test_tools.py`](../../tests/unit/test_tools.py)：验证未读候选不会成为来源，且记录最终页面 provenance。
 - [`test_adapters.py`](../../tests/unit/test_adapters.py)：验证重定向到私网目标会被拒绝。
 - [`test_research.py`](../../tests/unit/test_research.py)：验证引用未读来源时 fail closed。
+- [`test_app.py`](../../tests/ui/test_app.py)：验证远端标题不能为来源按钮增加链接或图片目标。

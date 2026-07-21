@@ -55,6 +55,29 @@ class MarkdownInjectionService:
         )
 
 
+class ActiveTitleService:
+    source_title = (
+        "Official [injected](https://attacker.example) ![pixel](https://tracker.example/p.gif)"
+    )
+
+    def research(self, request: ResearchRequest) -> ResearchReport:
+        return ResearchReport(
+            answer_markdown="Grounded answer. [S1]",
+            sources=[
+                Source(
+                    source_id="S1",
+                    title=self.source_title,
+                    url="https://example.com/docs",
+                    retrieved_at=datetime.now(UTC),
+                )
+            ],
+        )
+
+
+class DestinationOnlyTitleService(ActiveTitleService):
+    source_title = "https://tracker.example/p.gif"
+
+
 class MarkdownDiagnosticService:
     payload = "[Injected](https://attacker.example)"
 
@@ -128,6 +151,28 @@ def test_ui_keeps_source_url_out_of_markdown_syntax() -> None:
     assert links[0].label == "[S1] Official [docs]"
     assert links[0].url == MarkdownInjectionService.source_url
     assert all("attacker.example" not in element.value for element in app.markdown)
+    assert not app.exception
+
+
+def test_ui_removes_link_targets_from_source_title() -> None:
+    app = build_app(ActiveTitleService())
+
+    app.chat_input[0].set_value("LangChain").run()
+
+    link = app.get("link_button")[0]
+    assert link.label == "[S1] Official injected pixel"
+    assert link.url == "https://example.com/docs"
+    assert not app.exception
+
+
+def test_ui_uses_fixed_title_when_source_title_is_only_a_destination() -> None:
+    app = build_app(DestinationOnlyTitleService())
+
+    app.chat_input[0].set_value("LangChain").run()
+
+    link = app.get("link_button")[0]
+    assert link.label == "[S1] Source"
+    assert link.url == "https://example.com/docs"
     assert not app.exception
 
 

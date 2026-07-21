@@ -13,7 +13,9 @@
   已读证据分开保存；报告只列出成功读取的页面，并使用重定向后再次通过公网校验的最终
   URL、页面标题和实际读取时间，不会把未读候选伪装成来源。每次 web search 最多把 provider
   返回的前 5 条结果登记并交给模型，即使 provider 忽略请求的结果上限。
-- Streamlit 来源链接通过分离的 label/URL 参数渲染，来源 URL 不会拼接进 Markdown 语法。
+- Streamlit 来源链接通过分离的 label/URL 参数渲染，来源 URL 不会拼接进 Markdown 语法；
+  远端页面标题进入 GFM-capable label 前会移除活动链接、图片和 autolink 目标，报告中的原始
+  provenance 标题保持不变。
 - Streamlit warning/error 使用固定 alert 文案，并把上游诊断详情作为非 Markdown code text
   渲染，避免把搜索结果或异常内容解释成活动链接。
 - `ResearchReport.outcome` 提供稳定的 terminal category；domain 只允许带有效 citations 的

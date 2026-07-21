@@ -7,10 +7,15 @@ import streamlit as st
 from agent_learn.bootstrap import build_research_service
 from agent_learn.cli import Researcher
 from agent_learn.config import ConfigurationError
-from agent_learn.domain import ResearchReport, ResearchRequest
+from agent_learn.domain import ResearchReport, ResearchRequest, remove_markdown_link_targets
 
 _SERVICE_KEY = "_agent_learn_service"
 _HISTORY_KEY = "_agent_learn_history"
+
+
+def _source_link_label(source_id: str, title: str) -> str:
+    safe_title, _ = remove_markdown_link_targets(title)
+    return f"[{source_id}] {safe_title or 'Source'}"
 
 
 @st.cache_resource(show_spinner=False)
@@ -25,7 +30,7 @@ def _render_report(report: ResearchReport) -> None:
         st.markdown("#### 来源")
         for source in report.sources:
             st.link_button(
-                f"[{source.source_id}] {source.title}",
+                _source_link_label(source.source_id, source.title),
                 source.url,
                 type="tertiary",
             )

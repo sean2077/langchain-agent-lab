@@ -23,7 +23,10 @@ def build_local_chat_model(
         temperature=0,
         num_ctx=num_ctx,
         num_predict=num_predict,
-        client_kwargs={"trust_env": False},
+        client_kwargs={
+            "trust_env": False,
+            "timeout": settings.ollama_timeout_seconds,
+        },
     )
 
 

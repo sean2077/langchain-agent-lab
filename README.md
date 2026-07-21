@@ -6,7 +6,9 @@
 
 - 模型在本机 Ollama 运行，默认 `qwen3.5:9b`；`OLLAMA_BASE_URL` 只接受
   `localhost`、IPv4 loopback 或 IPv6 loopback 的 HTTP(S) endpoint，其他目标会在启动时拒绝；
-  Ollama client 不继承系统 HTTP proxy。
+  Ollama client 不继承系统 HTTP proxy。transport 的 connect/read/write/pool timeout 默认
+  为 300 秒，可通过正有限值 `OLLAMA_TIMEOUT_SECONDS` 调整；研究主路径把传输超时纳入
+  既有 fail-closed，但这不是整个 Agent run 的硬 wall-clock deadline。
 - Agent 只能搜索公网和读取已登记的候选，不能把任意 URL 直接交给读取工具。搜索候选与
   已读证据分开保存；报告只列出成功读取的页面，并使用重定向后再次通过公网校验的最终
   URL、页面标题和实际读取时间，不会把未读候选伪装成来源。

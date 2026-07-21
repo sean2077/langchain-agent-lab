@@ -39,7 +39,9 @@
 - Python 3.12 + uv；LangChain/LangGraph v1 兼容依赖并提交 lockfile。
 - Ollama `qwen3.5:9b` + `ChatOllama`；`OLLAMA_BASE_URL` 只允许 loopback HTTP(S)
   endpoint，并拒绝 URL credentials、query 与 fragment；Ollama client 不继承系统 HTTP
-  proxy；tool calling 或 structured output smoke test 失败时停止并重新选型，不静默切云模型。
+  proxy；`OLLAMA_TIMEOUT_SECONDS` 是正有限值，默认 300 秒，并作为 sync/async client 的
+  connect/read/write/pool timeout；它不是 Agent run 的 wall-clock deadline。tool calling 或
+  structured output smoke test 失败时停止并重新选型，不静默切云模型。
 - 免费 DuckDuckGo Search；页面读取只允许公网 HTTP(S)，仅按精确主 media type 接受
   `text/html`、`text/plain`、`application/xhtml+xml`，拒绝本机/私网地址与其他内容，并限制
   重定向、超时和响应大小。

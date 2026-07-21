@@ -23,6 +23,8 @@
   未完成/error。
 - CLI/eval 在 terminal sink 剔除 active C0/C1 controls（保留 tab/newline）；JSON sink 将残余
   controls 序列化为 `\uXXXX`，domain report 本身保持不变。
+- CLI 在参数解析和 `ResearchRequest` 校验成功后才初始化运行时适配器；help 不依赖运行时
+  配置，非法问题或配置以退出码 2 和无 traceback 的简短错误结束。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。
 - 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
   data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性

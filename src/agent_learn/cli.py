@@ -8,6 +8,8 @@ import sys
 from collections.abc import Sequence
 from typing import Protocol, TextIO
 
+from pydantic import ValidationError
+
 from agent_learn.bootstrap import build_research_service
 from agent_learn.domain import ResearchReport, ResearchRequest
 
@@ -33,16 +35,29 @@ class Researcher(Protocol):
 def run_cli(
     argv: Sequence[str],
     *,
-    service: Researcher,
     stdout: TextIO,
     stderr: TextIO,
+    service: Researcher | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description="Run the local source-grounded research agent")
     parser.add_argument("question", nargs="+", help="research question")
     parser.add_argument("--json", action="store_true", help="emit the complete report as JSON")
     args = parser.parse_args(list(argv))
 
-    report = service.research(ResearchRequest(question=" ".join(args.question)))
+    try:
+        request = ResearchRequest(question=" ".join(args.question))
+    except ValidationError:
+        stderr.write("error: question must contain between 1 and 4000 non-whitespace characters\n")
+        return 2
+
+    if service is None:
+        try:
+            service = build_research_service(trace_enabled=False)
+        except ValueError as error:
+            stderr.write(strip_terminal_controls(f"error: {error}\n"))
+            return 2
+
+    report = service.research(request)
     if args.json:
         stdout.write(escape_terminal_controls(report.model_dump_json(indent=2)) + "\n")
     else:
@@ -64,7 +79,6 @@ def main() -> None:
     raise SystemExit(
         run_cli(
             sys.argv[1:],
-            service=build_research_service(trace_enabled=False),
             stdout=sys.stdout,
             stderr=sys.stderr,
         )

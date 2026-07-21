@@ -52,6 +52,18 @@ uv run streamlit run streamlit_app.py \
 
 打开 <http://127.0.0.1:8501>。
 
+## 本地质量实验
+
+启动 Ollama 并确保可以访问公网后，运行固定的 5-case dataset：
+
+```bash
+uv run agent-learn-eval
+```
+
+命令逐题输出报告供人工审阅，并用确定性 code evaluator 检查报告契约和指定第一方来源是否
+真的被引用；单题失败不会中止其余 case。它不会启用 hosted tracing，也不会保存模型输出。
+语义支持与“可直接使用”仍必须按 [`docs/quality-gate.md`](docs/quality-gate.md) 人工判断。
+
 ## 合成 LangSmith trace
 
 trace 命令不接收任意问题，只允许三个仓库内固定的非敏感 case：
@@ -74,7 +86,7 @@ uv run python examples/langsmith_trace.py --case tool-selection
 
 - [`docs/ecosystem-map.md`](docs/ecosystem-map.md)：LangChain、LangGraph、LangSmith、Deep Agents、Dify 与 Go 生态定位。
 - [`docs/learning-path.md`](docs/learning-path.md)：四阶段路线、官方资源和三个选型场景。
-- [`docs/quality-gate.md`](docs/quality-gate.md)：5 个真实问题的自动验收记录与用户确认栏。
+- [`docs/quality-gate.md`](docs/quality-gate.md)：5 个真实问题的可重复实验、自动检查与人工 rubric。
 - [`docs/spec.md`](docs/spec.md)：批准后的产品契约与非目标。
 
 ## 验证
@@ -99,6 +111,12 @@ uv run --extra dev pytest -m live -q
 
 ```bash
 uv run --extra dev pytest -m "live and not hosted_langsmith" -q
+```
+
+其中 5 个质量 case 也可单独收集或运行：
+
+```bash
+uv run --extra dev pytest tests/live/test_live_boundaries.py -k end_to_end_quality_case -q
 ```
 
 ## 已知限制

@@ -32,6 +32,7 @@ dev = [
 
 [project.scripts]
 agent-learn = "agent_learn.cli:main"
+agent-learn-eval = "agent_learn.evaluation:main"
 agent-learn-trace = "agent_learn.trace_demo:main"
 
 [tool.hatch.build.targets.wheel]

@@ -8,6 +8,7 @@ from agent_learn.adapters import DuckDuckGoSearchProvider, SafeHttpPageReader
 from agent_learn.bootstrap import build_local_chat_model, build_research_service
 from agent_learn.config import Settings
 from agent_learn.domain import ResearchRequest
+from agent_learn.evaluation import QUALITY_CASES, QualityCase, evaluate_report
 from agent_learn.trace_demo import SYNTHETIC_CASES
 from examples.deep_agent import run_deep_agent_demo
 
@@ -74,15 +75,16 @@ def test_safe_reader_fetches_official_langchain_page() -> None:
     assert "create_agent" in page.text
 
 
-def test_end_to_end_agent_returns_known_citations() -> None:
+@pytest.mark.parametrize("case", QUALITY_CASES, ids=lambda case: case.case_id)
+def test_end_to_end_quality_case(case: QualityCase) -> None:
     require_ollama()
     report = build_research_service(trace_enabled=False).research(
-        ResearchRequest(question=SYNTHETIC_CASES["langchain-overview"])
+        ResearchRequest(question=case.question)
     )
+    result = evaluate_report(case, report)
 
-    assert report.cited_source_ids
-    assert report.answer_markdown != "无法生成有来源支持的研究报告。"
-    assert set(report.cited_source_ids) <= {source.source_id for source in report.sources}
+    assert result.grounded_contract
+    assert result.missing_source_requirements == ()
 
 
 @pytest.mark.hosted_langsmith

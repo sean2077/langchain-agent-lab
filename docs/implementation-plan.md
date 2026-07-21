@@ -38,4 +38,4 @@
 - **Touches:** Ollama setup checks, integration tests, synthetic LangSmith trace command, complete test suite
 - **Test seam:** opt-in live tests against real local/external services
 - **Verification:** `uv run --extra dev pytest -q` and `uv run --extra dev pytest -m live -q`
-- **Result/Evidence:** Ollama 0.32.1 + `qwen3.5:9b`; final suite `61 passed, 1 skipped`; 5 non-hosted live boundaries passed; 5/5 quality cases returned grounded reports from successfully read sources; hosted LangSmith case is deterministically covered but live execution was skipped because `LANGSMITH_API_KEY` is not configured
+- **Result/Evidence:** Ollama 0.32.1 + `qwen3.5:9b`; final suite `61 passed, 1 skipped`; 5 non-hosted live boundaries passed; 5/5 quality cases returned grounded reports from successfully read sources; hosted LangSmith case is deterministically covered but live execution was skipped because `LANGSMITH_API_KEY` is not configured. This is historical 2026-07-18 structural evidence, not a current regression result or proof of semantic support; the reproducible workflow now lives in `agent-learn-eval` and `docs/quality-gate.md`.

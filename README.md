@@ -103,6 +103,7 @@ uv run python examples/langsmith_trace.py --case tool-selection
 
 - [`docs/ecosystem-map.md`](docs/ecosystem-map.md)：LangChain、LangGraph、LangSmith、Deep Agents、Dify 与 Go 生态定位。
 - [`docs/learning-path.md`](docs/learning-path.md)：四阶段路线、官方资源和三个选型场景。
+- [`docs/concepts/README.md`](docs/concepts/README.md)：来源、引用、超时、LangGraph edge 与 tracing 隐私边界的 5 组详细问答。
 - [`docs/quality-gate.md`](docs/quality-gate.md)：5 个真实问题的可重复实验、自动检查与人工 rubric。
 - [`docs/spec.md`](docs/spec.md)：批准后的产品契约与非目标。
 

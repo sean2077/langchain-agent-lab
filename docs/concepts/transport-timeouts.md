@@ -55,9 +55,28 @@ transport 的阶段等待，并避免模型 client 继承系统 HTTP proxy。
 
 ### 页面读取与 DNS
 
-`SafeHttpPageReader` 有独立的 10 秒 HTTPX timeout，并有响应大小、正文字符数和最多三次
-重定向等边界。Fake-IP 公共 DNS 查询使用另一个 5 秒 timeout。这些限制属于不同外部调用，
-`OLLAMA_TIMEOUT_SECONDS` 不会覆盖它们。
+`SafeHttpPageReader` 有独立的 10 秒 HTTPX timeout、默认 30 秒的连接尝试预算，以及响应大小、
+正文字符数和最多三次重定向等边界。Fake-IP 公共 DNS 查询使用另一个 5 秒 timeout。这些限制
+属于不同外部调用，`OLLAMA_TIMEOUT_SECONDS` 不会覆盖它们。
+
+30 秒是本项目的 reader 构造参数默认值，不是 HTTPX 标准值或生产延迟结论。一次 `read()`
+只建立一个单调时钟 deadline，所有已验证公网地址和后续重定向都共享它。发起每个新 HTTPX
+请求前，reader 计算：
+
+```text
+attempt timeout = min(10 秒 transport timeout, 连接尝试剩余预算)
+```
+
+剩余预算不大于零时不再发起请求，而是 fail closed。这样即使解析结果含很多地址，也不会让
+每个地址都重新获得完整的 10 秒窗口；重定向也不会重置 30 秒预算。地址集合本身不会被截断或
+重排，预算允许时仍按验证器给出的顺序回退。当前实现没有并发竞速地址，也不声称实现了
+Happy Eyeballs。
+
+这个机制仍不是整页硬 deadline。同步 DNS 解析不能被单调时钟检查从中途取消；如果它返回时
+预算已耗尽，reader 只能在下一个 HTTP 请求前停止。连接成功后的响应体只受 HTTPX 的逐阶段
+无进展 timeout 和大小上限约束，持续到达的小块数据不会因 30 秒绝对时刻自动取消。因此该
+预算准确约束的是“是否继续发起地址/重定向连接尝试”，而不是 `read()` 的所有 wall-clock
+工作。
 
 ### 尚未实现的边界
 
@@ -79,5 +98,6 @@ transport 的阶段等待，并避免模型 client 继承系统 HTTP proxy。
 - [`bootstrap.py`](../../src/agent_learn/bootstrap.py)：把 timeout 传给 `ChatOllama` client。
 - [`adapters.py`](../../src/agent_learn/adapters.py)：页面读取器的独立 timeout、重定向和大小边界。
 - [`security.py`](../../src/agent_learn/security.py)：Fake-IP 公共 DNS 查询的独立 timeout。
+- [`test_adapters.py`](../../tests/unit/test_adapters.py)：共享预算、地址回退和重定向的确定性验证。
 - [`test_config.py`](../../tests/unit/test_config.py)：拒绝零、负数、无穷和非数字配置。
 - [`test_bootstrap.py`](../../tests/unit/test_bootstrap.py)：验证模型 transport 收到配置值且不继承 proxy。

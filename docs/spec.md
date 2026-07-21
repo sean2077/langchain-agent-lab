@@ -56,7 +56,10 @@
   structured output smoke test 失败时停止并重新选型，不静默切云模型。
 - 免费 DuckDuckGo Search；页面读取只允许公网 HTTP(S)，仅按精确主 media type 接受
   `text/html`、`text/plain`、`application/xhtml+xml`，拒绝本机/私网地址与其他内容，并限制
-  重定向、超时和响应大小。
+  重定向、超时和响应大小。读取器保留已验证地址列表及其解析顺序；每次 `read()` 使用默认
+  30 秒的正有限连接尝试预算，由地址回退与重定向共享，并把每次新 HTTPX 请求的 timeout
+  压缩到剩余预算。该策略不硬中断同步 DNS 或持续进展的响应体读取，也不构成整页或 Agent
+  run 的 wall-clock deadline。
 - Clash/Mihomo Fake-IP 仅触发公共 DNS 再验证；读取连接固定到验证后的公网 IP 并保留原域名 SNI/Host。
 - Streamlit 本地单用户 UI；不做部署、认证、多用户或远程访问。
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import ipaddress
+import math
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from time import monotonic
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
@@ -72,20 +74,27 @@ class SafeHttpPageReader:
         self,
         *,
         timeout_seconds: float = 10.0,
+        connection_budget_seconds: float = 30.0,
         max_bytes: int = 2_000_000,
         max_characters: int = 20_000,
         max_redirects: int = 3,
         transport: httpx.BaseTransport | None = None,
         target_validator: Callable[[str], ValidatedHttpUrl] = validate_public_http_target,
+        clock: Callable[[], float] = monotonic,
     ) -> None:
+        if not math.isfinite(connection_budget_seconds) or connection_budget_seconds <= 0:
+            raise ValueError("connection_budget_seconds must be positive and finite")
         self._timeout = timeout_seconds
+        self._connection_budget = connection_budget_seconds
         self._max_bytes = max_bytes
         self._max_characters = max_characters
         self._max_redirects = max_redirects
         self._transport = transport
         self._target_validator = target_validator
+        self._clock = clock
 
     def read(self, url: str) -> Page:
+        connection_deadline = self._clock() + self._connection_budget
         current_url = url
         headers = {"User-Agent": "agent-learn/0.1 (+local research assistant)"}
         with httpx.Client(
@@ -97,7 +106,7 @@ class SafeHttpPageReader:
         ) as client:
             for redirect_count in range(self._max_redirects + 1):
                 target = self._target_validator(current_url)
-                result = self._fetch_target(client, target)
+                result = self._fetch_target(client, target, connection_deadline)
                 if isinstance(result, Page):
                     return result
                 if redirect_count >= self._max_redirects:
@@ -106,9 +115,15 @@ class SafeHttpPageReader:
 
         raise ValueError("page could not be fetched")
 
-    def _fetch_target(self, client: httpx.Client, target: ValidatedHttpUrl) -> Page | str:
+    def _fetch_target(
+        self,
+        client: httpx.Client,
+        target: ValidatedHttpUrl,
+        connection_deadline: float,
+    ) -> Page | str:
         last_connection_error: httpx.HTTPError | None = None
         for address in target.addresses:
+            attempt_timeout = self._remaining_connection_timeout(connection_deadline)
             request_url = self._pinned_url(target, address)
             request_headers = {"Host": self._host_header(target)}
             extensions = (
@@ -122,6 +137,7 @@ class SafeHttpPageReader:
                     request_url,
                     headers=request_headers,
                     extensions=extensions,
+                    timeout=attempt_timeout,
                 ) as response:
                     if response.is_redirect:
                         location = response.headers.get("location")
@@ -160,6 +176,12 @@ class SafeHttpPageReader:
         if last_connection_error is not None:
             raise last_connection_error
         raise ValueError("validated target has no addresses")
+
+    def _remaining_connection_timeout(self, connection_deadline: float) -> float:
+        remaining = connection_deadline - self._clock()
+        if remaining <= 0:
+            raise TimeoutError("page connection attempt budget exhausted")
+        return min(self._timeout, remaining)
 
     @staticmethod
     def _pinned_url(target: ValidatedHttpUrl, address: str) -> str:

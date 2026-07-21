@@ -156,6 +156,105 @@ def test_page_reader_tries_each_validated_address() -> None:
     assert page.text == "fetched from fallback address"
 
 
+@pytest.mark.parametrize(
+    "connection_budget_seconds",
+    [0.0, -1.0, float("inf"), float("nan")],
+)
+def test_page_reader_rejects_invalid_connection_budget(
+    connection_budget_seconds: float,
+) -> None:
+    with pytest.raises(ValueError, match="connection_budget_seconds must be positive and finite"):
+        SafeHttpPageReader(connection_budget_seconds=connection_budget_seconds)
+
+
+def test_page_reader_does_not_connect_after_validation_exhausts_budget() -> None:
+    elapsed = [0.0]
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request.url.host)
+        return httpx.Response(200, headers={"content-type": "text/plain"}, text="too late")
+
+    def target(url: str) -> ValidatedHttpUrl:
+        elapsed[0] += 6.0
+        return validated_target(url)
+
+    reader = SafeHttpPageReader(
+        connection_budget_seconds=5.0,
+        clock=lambda: elapsed[0],
+        transport=httpx.MockTransport(handler),
+        target_validator=target,
+    )
+
+    with pytest.raises(TimeoutError, match="page connection attempt budget exhausted"):
+        reader.read("https://example.com/slow-validation")
+
+    assert attempts == []
+
+
+def test_page_reader_bounds_address_attempts_by_shared_connection_budget() -> None:
+    elapsed = [0.0]
+    attempts: list[str] = []
+    connect_timeouts: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request.url.host)
+        connect_timeouts.append(request.extensions["timeout"]["connect"])
+        elapsed[0] += 2.0
+        raise httpx.ConnectError("address unavailable", request=request)
+
+    def target(url: str) -> ValidatedHttpUrl:
+        return ValidatedHttpUrl(
+            url=url,
+            hostname="example.com",
+            port=443,
+            addresses=tuple(f"93.184.216.{suffix}" for suffix in range(34, 39)),
+        )
+
+    reader = SafeHttpPageReader(
+        timeout_seconds=10.0,
+        connection_budget_seconds=5.0,
+        clock=lambda: elapsed[0],
+        transport=httpx.MockTransport(handler),
+        target_validator=target,
+    )
+
+    with pytest.raises(TimeoutError, match="page connection attempt budget exhausted"):
+        reader.read("https://example.com/unavailable")
+
+    assert attempts == ["93.184.216.34", "93.184.216.35", "93.184.216.36"]
+    assert connect_timeouts == [5.0, 3.0, 1.0]
+
+
+def test_page_reader_shares_connection_budget_across_redirects() -> None:
+    elapsed = [0.0]
+    connect_timeouts: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        connect_timeouts.append(request.extensions["timeout"]["connect"])
+        if request.url.path == "/start":
+            elapsed[0] += 4.0
+            return httpx.Response(302, headers={"location": "/final"})
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            text="redirected within budget",
+        )
+
+    reader = SafeHttpPageReader(
+        timeout_seconds=10.0,
+        connection_budget_seconds=5.0,
+        clock=lambda: elapsed[0],
+        transport=httpx.MockTransport(handler),
+        target_validator=validated_target,
+    )
+
+    page = reader.read("https://example.com/start")
+
+    assert page.text == "redirected within budget"
+    assert connect_timeouts == [5.0, 1.0]
+
+
 class OneResultSearch:
     def search(self, query: str, *, max_results: int) -> list[SearchHit]:
         return [SearchHit("Official docs", "https://example.com/docs", "Agent API")]

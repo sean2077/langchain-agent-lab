@@ -1,3 +1,4 @@
+import socket
 from datetime import UTC, datetime
 
 import httpx
@@ -8,7 +9,7 @@ from langsmith.utils import get_env_var, tracing_is_enabled
 
 from agent_learn.adapters import LangChainAgentBackend, SafeHttpPageReader
 from agent_learn.runtime import Page, SearchHit
-from agent_learn.security import UnsafeUrlError, ValidatedHttpUrl
+from agent_learn.security import UnsafeUrlError, ValidatedHttpUrl, validate_public_http_target
 from agent_learn.tools import ResearchTools
 
 
@@ -154,6 +155,65 @@ def test_page_reader_tries_each_validated_address() -> None:
 
     assert attempts == ["93.184.216.34", "93.184.216.35"]
     assert page.text == "fetched from fallback address"
+
+
+def test_page_reader_tries_other_address_family_before_budget_expires() -> None:
+    elapsed = [0.0]
+    attempts: list[str] = []
+    connect_timeouts: list[float] = []
+    resolved = [
+        (
+            socket.AF_INET6,
+            socket.SOCK_STREAM,
+            6,
+            "",
+            ("2606:2800:220:1:248:1893:25c8:1946", 443, 0, 0),
+        ),
+        (
+            socket.AF_INET6,
+            socket.SOCK_STREAM,
+            6,
+            "",
+            ("2001:4860:4860::8888", 443, 0, 0),
+        ),
+        (
+            socket.AF_INET6,
+            socket.SOCK_STREAM,
+            6,
+            "",
+            ("2606:4700:4700::1111", 443, 0, 0),
+        ),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2620:fe::fe", 443, 0, 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request.url.host)
+        connect_timeouts.append(request.extensions["timeout"]["connect"])
+        if ":" in request.url.host:
+            elapsed[0] += 2.0
+            raise httpx.ConnectError("IPv6 path unavailable", request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            text="IPv4 fallback works",
+        )
+
+    reader = SafeHttpPageReader(
+        connection_budget_seconds=5.0,
+        clock=lambda: elapsed[0],
+        transport=httpx.MockTransport(handler),
+        target_validator=lambda url: validate_public_http_target(
+            url,
+            resolver=lambda *_: resolved,
+        ),
+    )
+
+    page = reader.read("https://example.com/dual-stack")
+
+    assert attempts == ["2606:2800:220:1:248:1893:25c8:1946", "93.184.216.34"]
+    assert connect_timeouts == [5.0, 3.0]
+    assert page.text == "IPv4 fallback works"
 
 
 @pytest.mark.parametrize(

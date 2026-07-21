@@ -33,10 +33,11 @@
   裸 URL/email 目标会移除；HTML rendering 保持关闭。常见 citation 格式偏差会规范化，
   必要时最多做一次无工具修订。
 - Clash/Mihomo Fake-IP 场景使用公共 DNS 再验证并固定到公网 IP，不直接放行 `198.18.0.0/15`。
-- 页面读取不截断已验证的公网地址列表，并按解析顺序依次尝试；一次 `read()` 默认使用 30 秒的
-  正有限连接尝试预算，由所有地址和重定向共享。每次新请求的 HTTPX timeout 会压缩到剩余
-  预算，预算耗尽即 fail closed。该预算不能硬中断同步 DNS 或持续有数据到达的响应体处理，
-  也不是整页读取或整个 Agent run 的硬 wall-clock deadline。
+- 页面读取保留全部已验证公网地址；以解析结果的首地址族为偏好、保留同族相对顺序，交错
+  IPv4/IPv6 后再顺序尝试。一次 `read()` 默认使用 30 秒的正有限连接尝试预算，由所有地址和
+  重定向共享。每次新请求的 HTTPX timeout 会压缩到剩余预算，预算耗尽即 fail closed。该
+  顺序策略不是并发竞速；预算不能硬中断同步 DNS 或持续有数据到达的响应体处理，也不是整页
+  读取或整个 Agent run 的硬 wall-clock deadline。
 - 页面响应只精确允许 `text/html`、`text/plain` 与 `application/xhtml+xml` 主 media type；
   header 参数中出现这些字符串不会绕过非网页内容拒绝。
 - Streamlit 只监听 `127.0.0.1`，没有认证、多用户和公开部署。

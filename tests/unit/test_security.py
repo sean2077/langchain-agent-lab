@@ -80,3 +80,99 @@ def test_validate_public_http_target_rejects_private_public_dns_answer() -> None
             resolver=fake_ip_resolver,
             public_dns_resolver=lambda _hostname: ["192.168.1.12"],
         )
+
+
+@pytest.mark.parametrize(
+    ("addresses", "expected"),
+    [
+        (
+            (
+                "2606:4700:4700::1111",
+                "2001:4860:4860::8888",
+                "1.1.1.1",
+                "8.8.8.8",
+                "2620:fe::fe",
+            ),
+            (
+                "2606:4700:4700::1111",
+                "1.1.1.1",
+                "2001:4860:4860::8888",
+                "8.8.8.8",
+                "2620:fe::fe",
+            ),
+        ),
+        (
+            (
+                "1.1.1.1",
+                "8.8.8.8",
+                "2606:4700:4700::1111",
+                "2001:4860:4860::8888",
+                "9.9.9.9",
+            ),
+            (
+                "1.1.1.1",
+                "2606:4700:4700::1111",
+                "8.8.8.8",
+                "2001:4860:4860::8888",
+                "9.9.9.9",
+            ),
+        ),
+        (
+            ("1.1.1.1", "8.8.8.8", "1.1.1.1", "9.9.9.9"),
+            ("1.1.1.1", "8.8.8.8", "9.9.9.9"),
+        ),
+    ],
+)
+def test_validate_public_http_target_stably_interleaves_address_families(
+    addresses: tuple[str, ...],
+    expected: tuple[str, ...],
+) -> None:
+    def resolver(
+        *_: object,
+    ) -> list[tuple[object, object, object, object, tuple[object, ...]]]:
+        return [
+            (
+                socket.AF_INET6 if ":" in address else socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                (address, 443, 0, 0) if ":" in address else (address, 443),
+            )
+            for address in addresses
+        ]
+
+    target = validate_public_http_target("https://example.com/research", resolver=resolver)
+
+    assert target.addresses == expected
+
+
+def test_validate_public_http_target_interleaves_public_dns_families() -> None:
+    def fake_ip_resolver(
+        *_: object,
+    ) -> list[tuple[object, object, object, object, tuple[str, int]]]:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.42", 443))]
+
+    target = validate_public_http_target(
+        "https://example.com/research",
+        resolver=fake_ip_resolver,
+        public_dns_resolver=lambda _hostname: [
+            "1.1.1.1",
+            "8.8.8.8",
+            "2606:4700:4700::1111",
+            "2001:4860:4860::8888",
+        ],
+    )
+
+    assert target.addresses == (
+        "1.1.1.1",
+        "2606:4700:4700::1111",
+        "8.8.8.8",
+        "2001:4860:4860::8888",
+    )
+
+
+def test_validate_public_http_target_preserves_public_ip_literal() -> None:
+    target = validate_public_http_target("https://[2606:4700:4700::1111]/research")
+
+    assert target.hostname == "2606:4700:4700::1111"
+    assert target.addresses == ("2606:4700:4700::1111",)

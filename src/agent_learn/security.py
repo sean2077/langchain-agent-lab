@@ -49,6 +49,34 @@ def _is_fake_ip_address(address: str) -> bool:
     return isinstance(parsed, ipaddress.IPv4Address) and parsed in _FAKE_IP_NETWORK
 
 
+def _interleave_address_families(addresses: Sequence[str]) -> tuple[str, ...]:
+    """Alternate families while preserving first-family and per-family order."""
+
+    unique_addresses = tuple(dict.fromkeys(addresses))
+    if not unique_addresses:
+        return ()
+
+    first_version = ipaddress.ip_address(unique_addresses[0]).version
+    first_family = [
+        address
+        for address in unique_addresses
+        if ipaddress.ip_address(address).version == first_version
+    ]
+    other_family = [
+        address
+        for address in unique_addresses
+        if ipaddress.ip_address(address).version != first_version
+    ]
+
+    interleaved: list[str] = []
+    for index, address in enumerate(first_family):
+        interleaved.append(address)
+        if index < len(other_family):
+            interleaved.append(other_family[index])
+    interleaved.extend(other_family[len(first_family) :])
+    return tuple(interleaved)
+
+
 def resolve_public_dns(hostname: str) -> tuple[str, ...]:
     """Resolve a Fake-IP hostname with DNS-over-HTTPS.
 
@@ -147,6 +175,8 @@ def validate_public_http_target(
                 raise UnsafeUrlError(f"hostname could not be resolved by public DNS: {hostname}")
         for address in addresses:
             _require_global_address(address)
+
+    addresses = _interleave_address_families(addresses)
 
     return ValidatedHttpUrl(
         url=urlunsplit(parts),

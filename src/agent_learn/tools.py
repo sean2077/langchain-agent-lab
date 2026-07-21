@@ -62,7 +62,7 @@ class ResearchTools:
             self.warnings.append(warning)
             return json.dumps({"error": warning, "sources": []}, ensure_ascii=False)
 
-        return self.register_sources(hits)
+        return self.register_sources(hits[: self._max_search_results])
 
     def register_sources(self, hits: Sequence[SearchHit]) -> str:
         """Register trusted or searched candidates in the request-local source registry."""

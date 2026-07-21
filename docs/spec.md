@@ -27,6 +27,8 @@
   配置。CLI、eval、synthetic trace 与 Streamlit 只把已分类的配置异常转换为无 traceback 的
   操作员错误；其他构造/执行异常保持可见，避免隐藏程序缺陷。
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成的链接目标不进入正文。
+- 每次 web search 在本地只登记并返回 provider 结果的前 5 条；该上限不依赖 provider 自行遵守，
+  也不限制独立预登记的核验后官方候选。
 - 成功报告至少包含一个 citable content block，且每个 prose paragraph、list item 和 table
   data row 都必须包含引用；Markdown heading、separator 和 fenced code block 属于结构性
   豁免。该确定性规则验证 citation coverage 与 source identity，不声称验证引用内容在语义上

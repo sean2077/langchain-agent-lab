@@ -14,6 +14,18 @@ class DuplicateSearch(SearchProvider):
         ]
 
 
+class OverReturningSearch(SearchProvider):
+    def __init__(self) -> None:
+        self.requested_limits: list[int] = []
+
+    def search(self, query: str, *, max_results: int) -> list[SearchHit]:
+        self.requested_limits.append(max_results)
+        return [
+            SearchHit(f"Result {index}", f"https://example.com/{index}", "snippet")
+            for index in range(1, 9)
+        ]
+
+
 class Reader(PageReader):
     def read(self, url: str) -> Page:
         return Page("Fetched", url, "Readable page text", datetime.now(UTC))
@@ -38,6 +50,23 @@ def test_search_assigns_stable_ids_and_deduplicates_urls() -> None:
 
     assert [item["source_id"] for item in payload["sources"]] == ["S1", "S2"]
     assert tools.registered_source_ids == {"S1", "S2"}
+
+
+def test_search_enforces_result_limit_when_provider_over_returns() -> None:
+    provider = OverReturningSearch()
+    tools = ResearchTools(provider, Reader(), url_validator=lambda url: url)
+
+    payload = json.loads(tools.search_web("query"))
+
+    assert provider.requested_limits == [5]
+    assert [item["source_id"] for item in payload["sources"]] == [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+    ]
+    assert tools.registered_source_ids == {"S1", "S2", "S3", "S4", "S5"}
 
 
 def test_register_sources_seeds_candidates_before_web_search() -> None:

@@ -35,8 +35,9 @@
   支持对应陈述。
 - 核心生态问题优先登记核验过的官方入口，但目录登记不等于可信引用，仍须通过相同公网读取边界。
 - 本地质量实验使用 5 个固定、非敏感 case；code evaluator 只验证成功报告契约和指定第一方
-  来源确实被引用，语义支持与“可直接使用”由人工 rubric 评审。实验不启用 hosted tracing，
-  不持久化模型输出。
+  来源确实被引用；页面 identity 精确包含 scheme、host、path 与 query，忽略 fragment，且不
+  将 identity 相等解释为语义支持。“可直接使用”仍由人工 rubric 评审。实验不启用 hosted
+  tracing，不持久化模型输出。
 - Streamlit 只绑定 `127.0.0.1`；CLI 调用同一个核心接口。
 - LangSmith 只允许在专用合成测试配置中启用；正常 CLI/UI/eval 以 request-local context
   显式覆盖环境 tracing 开关，合成 opt-in 使用独立 project 和 `synthetic` tag。

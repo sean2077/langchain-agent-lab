@@ -73,6 +73,29 @@ def test_code_evaluator_rejects_a_different_page_with_matching_path_prefix() -> 
     assert result.passed is False
 
 
+def test_code_evaluator_rejects_required_page_with_unaccepted_query() -> None:
+    case = QUALITY_CASES[1]
+    report = make_report(
+        "https://docs.langchain.com/oss/python/releases/langchain-v1",
+        "https://docs.langchain.com/oss/python/langgraph/overview?view=alternate",
+    )
+
+    result = evaluate_report(case, report)
+
+    assert result.missing_source_requirements == ("LangGraph overview",)
+    assert result.passed is False
+
+
+def test_code_evaluator_accepts_fragment_on_required_page() -> None:
+    case = QUALITY_CASES[0]
+    report = make_report("https://docs.langchain.com/oss/python/releases/langchain-v1#create-agent")
+
+    result = evaluate_report(case, report)
+
+    assert result.missing_source_requirements == ()
+    assert result.passed is True
+
+
 def test_code_evaluator_rejects_fail_closed_report() -> None:
     result = evaluate_report(
         QUALITY_CASES[0],

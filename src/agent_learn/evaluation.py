@@ -117,9 +117,14 @@ def evaluate_report(case: QualityCase, report: ResearchReport) -> QualityCaseRes
     )
 
 
-def _page_identity(url: str) -> tuple[str, str, str]:
+def _page_identity(url: str) -> tuple[str, str, str, str]:
     parts = urlsplit(url)
-    return parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/") or "/"
+    return (
+        parts.scheme.lower(),
+        parts.netloc.lower(),
+        parts.path.rstrip("/") or "/",
+        parts.query,
+    )
 
 
 def run_quality_experiment(*, service: Researcher, stdout: TextIO, stderr: TextIO) -> int:

@@ -15,6 +15,9 @@
   再次通过公网校验后创建；`title` 是实际页面标题的最多 500 字符前缀，空标题使用最终 URL
   的最多 500 字符前缀，完整 `url` 不截断。其元数据来自实际读取的最终页面，而不是搜索结果
   或登记时间；直接构造超限 domain value 仍失败。
+- HTML/XHTML reader 先保存实际页面标题，再从解析树移除 `head` 和 `title` 后生成
+  `Page.text` 并执行既有正文字符上限；标题元数据不重复占用正文证据预算。`text/plain`
+  行为不变；该结构性分离不构成 semantic main-content extraction 或通用 boilerplate removal。
 - `ResearchReport` 包含 `answer_markdown`、稳定的 `outcome`、`sources`、`warnings`；
   `outcome` 区分 `source_grounded`、`agent_error`、`insufficient_evidence` 与
   `invalid_report`，`sources` 只列成功读取的页面，不包含未读搜索候选。

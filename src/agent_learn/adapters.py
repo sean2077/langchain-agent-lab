@@ -205,7 +205,9 @@ class SafeHttpPageReader:
             return "", content.strip()
         soup = BeautifulSoup(content, "html.parser")
         title = soup.title.get_text(" ", strip=True) if soup.title else ""
-        for element in soup(["script", "style", "noscript", "svg", "nav", "footer"]):
+        if soup.head:
+            soup.head.decompose()
+        for element in soup(["title", "script", "style", "noscript", "svg", "nav", "footer"]):
             element.decompose()
         lines = [line.strip() for line in soup.get_text("\n").splitlines() if line.strip()]
         return title, "\n".join(lines)

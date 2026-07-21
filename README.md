@@ -16,6 +16,9 @@
   登记并交给模型，即使 provider 忽略请求的结果上限；所有搜索或预登记
   候选在模型可见 JSON 中的 title 最多 500 字符、snippet 最多 2,000 字符，完整已验证 URL
   identity 不变。字段上限在 provider 返回后执行，不是响应字节、token 或下载分配上限。
+- HTML/XHTML 页面先把实际 `title` 保存为独立元数据，再移除 `head`/`title` 后生成受字符上限
+  约束的 `Page.text`，避免标题重复占用正文证据预算；`text/plain` 仍按原文处理。这只是结构性
+  字段分离，不声称提取了语义上的主内容或清除了全部页面样板。
 - Streamlit 来源链接通过分离的 label/URL 参数渲染，来源 URL 不会拼接进 Markdown 语法；
   远端页面标题进入 GFM-capable label 前会移除活动链接、图片和 autolink 目标，报告中已记录
   的受限 provenance 标题保持不变。

@@ -47,6 +47,7 @@ def test_page_reader_extracts_readable_html() -> None:
     assert page.title == "Official docs"
     assert "LangChain" in page.text
     assert "Grounded text." in page.text
+    assert "Official docs" not in page.text
     assert "menu" not in page.text
     assert "hidden" not in page.text
 
@@ -83,14 +84,73 @@ def test_page_reader_accepts_xhtml_media_type_with_parameter() -> None:
         lambda request: httpx.Response(
             200,
             headers={"content-type": "Application/XHTML+XML; Charset=UTF-8"},
-            text="<html><body><main>Readable XHTML</main></body></html>",
+            text=(
+                "<html><head><title>XHTML metadata title</title></head>"
+                "<body><main>Readable XHTML</main></body></html>"
+            ),
         )
     )
     reader = SafeHttpPageReader(transport=transport, target_validator=validated_target)
 
     page = reader.read("https://example.com/page.xhtml")
 
+    assert page.title == "XHTML metadata title"
     assert page.text == "Readable XHTML"
+
+
+def test_page_reader_keeps_html_title_out_of_body_character_budget() -> None:
+    title = "T" * 100
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text=(
+                f"<html><head><title>{title}</title></head>"
+                "<body><main>BODY_EVIDENCE</main></body></html>"
+            ),
+        )
+    )
+    reader = SafeHttpPageReader(
+        max_characters=20,
+        transport=transport,
+        target_validator=validated_target,
+    )
+
+    page = reader.read("https://example.com/bounded")
+
+    assert page.title == title
+    assert page.text == "BODY_EVIDENCE"
+
+
+def test_page_reader_excludes_standalone_title_from_html_fragment() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text="<title>Fragment metadata</title><main>Fragment body</main>",
+        )
+    )
+    reader = SafeHttpPageReader(transport=transport, target_validator=validated_target)
+
+    page = reader.read("https://example.com/fragment")
+
+    assert page.title == "Fragment metadata"
+    assert page.text == "Fragment body"
+
+
+def test_page_reader_keeps_plain_text_body_unchanged() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "text/plain"},
+            text="  Plain title-like text\nwith body evidence.  ",
+        )
+    )
+    reader = SafeHttpPageReader(transport=transport, target_validator=validated_target)
+
+    page = reader.read("https://example.com/plain")
+
+    assert page.text == "Plain title-like text\nwith body evidence."
 
 
 @pytest.mark.parametrize(

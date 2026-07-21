@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from examples.deep_agent import build_deep_agent
 from examples.langchain_agent import build_langchain_agent
 from examples.langgraph_workflow import run_interrupt_demo
@@ -14,12 +16,16 @@ def test_langchain_example_builds_without_calling_model() -> None:
     assert agent.name == "langchain_minimal_agent"
 
 
-def test_langgraph_example_interrupts_and_resumes() -> None:
-    interrupted, completed = run_interrupt_demo(approved=True)
+@pytest.mark.parametrize(
+    ("approved", "expected_status"),
+    [(True, "published"), (False, "rejected")],
+)
+def test_langgraph_example_interrupts_and_resumes(approved: bool, expected_status: str) -> None:
+    interrupted, completed = run_interrupt_demo(approved=approved)
 
     assert interrupted["__interrupt__"]
-    assert completed["approved"] is True
-    assert completed["status"] == "published"
+    assert completed["approved"] is approved
+    assert completed["status"] == expected_status
 
 
 def test_deep_agent_example_builds_without_calling_model() -> None:

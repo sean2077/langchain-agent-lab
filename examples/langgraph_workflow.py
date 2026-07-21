@@ -13,7 +13,6 @@ from langgraph.types import Command, interrupt
 class ReviewState(TypedDict, total=False):
     topic: str
     draft: str
-    needs_review: bool
     approved: bool
     status: str
 
@@ -21,7 +20,6 @@ class ReviewState(TypedDict, total=False):
 def draft_report(state: ReviewState) -> ReviewState:
     return {
         "draft": f"Draft report about {state['topic']}",
-        "needs_review": True,
         "status": "drafted",
     }
 
@@ -39,10 +37,6 @@ def reject(_: ReviewState) -> ReviewState:
     return {"status": "rejected"}
 
 
-def route_draft(state: ReviewState) -> str:
-    return "review" if state["needs_review"] else "publish"
-
-
 def route_review(state: ReviewState) -> str:
     return "publish" if state["approved"] else "reject"
 
@@ -54,11 +48,7 @@ def build_review_graph():
     graph.add_node("publish", publish)
     graph.add_node("reject", reject)
     graph.add_edge(START, "draft")
-    graph.add_conditional_edges(
-        "draft",
-        route_draft,
-        {"review": "review", "publish": "publish"},
-    )
+    graph.add_edge("draft", "review")
     graph.add_conditional_edges(
         "review",
         route_review,

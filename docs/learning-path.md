@@ -10,7 +10,8 @@
 
 ## 阶段 2：LangGraph、LangSmith 与 Deep Agents
 
-- 运行 `examples/langgraph_workflow.py`，观察 interrupt 前后的 checkpoint state。
+- 调用 `examples.langgraph_workflow.run_interrupt_demo(approved=True/False)`，观察 checkpoint state
+  与两个 terminal status。
 - 学习 [LangGraph Essentials](https://academy.langchain.com/courses/langgraph-essentials-python)。
 - 运行固定合成 case 的 `agent-learn-trace`，在 LangSmith 中解释模型、工具和终止节点。
 - 运行 `examples/deep_agent.py`，对比普通 `create_agent` 与 Agent harness。

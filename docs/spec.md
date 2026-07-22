@@ -45,7 +45,8 @@
 - 正文只允许引用已收集且成功读取来源的 `[S1]` 一类 source id；模型生成且会被 Streamlit 的
   GFM renderer 激活的链接目标不进入正文。内联/引用链接只保留 label，尖括号 autolink 与
   裸 HTTP(S)、`www.`、email、`mailto:`、`xmpp:` 目标会被移除；默认不启用 HTML rendering，
-  该规则不声称提供通用 HTML sanitization。
+  该规则不声称提供通用 HTML sanitization。成功的链接目标移除与 citation 标记规范化属于
+  确定性内部恢复，不写入 `ResearchReport.warnings`；恢复后的正文仍执行完整报告校验。
 - 每次 web search 在本地只登记并返回 provider 结果的前 5 条；该上限不依赖 provider 自行遵守，
   也不限制独立预登记的核验后官方候选。搜索与预登记候选进入模型可见 JSON 前，title 最多
   500 字符、snippet 最多 2,000 字符；空 title 只用完整已验证 URL 的前 500 字符作显示 fallback，
@@ -56,6 +57,11 @@
   豁免。闭合或延伸到文末的 HTML comment 不可见，其中的标记不参与 citation identity 或
   coverage。该确定性规则验证 citation coverage 与 source identity，不声称验证引用内容在
   语义上支持对应陈述。
+- 主 Agent 的首轮 system prompt 使用与上述 block coverage 相同的表述；若初稿的引用身份、
+  coverage、可引用正文或回答语言不合格，最多进行一次图外无工具修订。成功修订不写入
+  `ResearchReport.warnings`；修订后仍不满足引用契约时由最终报告校验 fail closed，中文问题
+  修订后仍返回非中文时保留明确 warning。任何成功的确定性清洗或单次修订都不应被 UI 表示
+  为研究警告。
 - 核心生态问题优先登记核验过的官方入口，但目录登记不等于可信引用，仍须通过相同公网读取边界。
 - 本地质量实验使用 5 个固定、非敏感 case；code evaluator 只验证成功报告契约和指定第一方
   来源确实被引用；页面 identity 精确包含 scheme、host、path 与 query，忽略 fragment，且不
@@ -83,7 +89,11 @@
   正有限连接尝试预算，由地址回退与重定向共享，并把每次新 HTTPX 请求的 timeout 压缩到
   剩余预算。该策略不硬中断同步 DNS 或持续进展的响应体读取，也不构成整页或 Agent run 的
   wall-clock deadline。
-- Clash/Mihomo Fake-IP 仅触发公共 DNS 再验证；读取连接固定到验证后的公网 IP 并保留原域名 SNI/Host。
+- Clash/Mihomo Fake-IP 仅触发公共 DNS 再验证；DoH client 与页面 reader 均设置
+  `trust_env=False`，不继承进程级 HTTP(S) proxy。读取连接固定到验证后的公网 IP 并保留原域名
+  SNI/Host。A 与 AAAA 查询各最多尝试两次；任一地址族返回地址即可进入既有公网验证，两族都
+  无法完成或都无地址时 fail closed。该过程不缓存答案；仅允许显式 proxy、禁止直连公网的
+  环境继续 fail closed。
 - Streamlit 本地单用户 UI；不做部署、认证、多用户或远程访问。
 
 ## Learning outcomes

@@ -1,9 +1,12 @@
 import socket
+from collections.abc import Callable
 
+import httpx
 import pytest
 
 from agent_learn.security import (
     UnsafeUrlError,
+    resolve_public_dns,
     validate_public_http_target,
     validate_public_http_url,
 )
@@ -11,6 +14,120 @@ from agent_learn.security import (
 
 def public_resolver(*_: object) -> list[tuple[object, object, object, object, tuple[str, int]]]:
     return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+
+
+class _FakeDnsResponse:
+    content = b"{}"
+
+    def __init__(self, record_type: str) -> None:
+        self._record_type = record_type
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        type_number = 1 if self._record_type == "A" else 28
+        address = "93.184.216.34" if type_number == 1 else "2606:2800:220:1::"
+        return {
+            "Status": 0,
+            "Answer": [{"type": type_number, "data": address}],
+        }
+
+
+def _install_fake_dns_client(
+    monkeypatch: pytest.MonkeyPatch,
+    handler: Callable[[str], _FakeDnsResponse],
+    *,
+    client_kwargs: list[dict[str, object]] | None = None,
+) -> None:
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            if client_kwargs is not None:
+                client_kwargs.append(kwargs)
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def get(self, _url: str, **kwargs: object) -> _FakeDnsResponse:
+            params = kwargs["params"]
+            assert isinstance(params, dict)
+            return handler(str(params["type"]))
+
+    monkeypatch.setattr("agent_learn.security.httpx.Client", FakeClient)
+
+
+def test_public_dns_resolver_does_not_inherit_proxy_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_kwargs: list[dict[str, object]] = []
+    _install_fake_dns_client(
+        monkeypatch,
+        _FakeDnsResponse,
+        client_kwargs=client_kwargs,
+    )
+
+    addresses = resolve_public_dns("example.com")
+
+    assert addresses == ("93.184.216.34", "2606:2800:220:1::")
+    assert client_kwargs == [{"timeout": 5.0, "follow_redirects": True, "trust_env": False}]
+
+
+def test_public_dns_resolver_retries_transient_record_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def handler(record_type: str) -> _FakeDnsResponse:
+        calls.append(record_type)
+        if calls == ["A"]:
+            raise httpx.ConnectTimeout("transient DoH timeout")
+        return _FakeDnsResponse(record_type)
+
+    _install_fake_dns_client(monkeypatch, handler)
+
+    addresses = resolve_public_dns("example.com")
+
+    assert addresses == ("93.184.216.34", "2606:2800:220:1::")
+    assert calls == ["A", "A", "AAAA"]
+
+
+def test_public_dns_resolver_uses_one_family_when_the_other_stays_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def handler(record_type: str) -> _FakeDnsResponse:
+        calls.append(record_type)
+        if record_type == "AAAA":
+            raise httpx.ConnectTimeout("IPv6 DoH timeout")
+        return _FakeDnsResponse(record_type)
+
+    _install_fake_dns_client(monkeypatch, handler)
+
+    addresses = resolve_public_dns("example.com")
+
+    assert addresses == ("93.184.216.34",)
+    assert calls == ["A", "AAAA", "AAAA"]
+
+
+def test_public_dns_resolver_fails_closed_after_bounded_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def handler(record_type: str) -> _FakeDnsResponse:
+        calls.append(record_type)
+        raise httpx.ConnectTimeout("DoH unavailable")
+
+    _install_fake_dns_client(monkeypatch, handler)
+
+    with pytest.raises(UnsafeUrlError, match="public DNS lookup failed"):
+        resolve_public_dns("example.com")
+
+    assert calls == ["A", "A", "AAAA", "AAAA"]
 
 
 @pytest.mark.parametrize(

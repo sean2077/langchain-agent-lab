@@ -83,8 +83,9 @@ def test_end_to_end_quality_case(case: QualityCase) -> None:
     )
     result = evaluate_report(case, report)
 
-    assert result.grounded_contract
-    assert result.missing_source_requirements == ()
+    report_diagnostic = report.model_dump_json(indent=2)
+    assert result.grounded_contract, report_diagnostic
+    assert result.missing_source_requirements == (), report_diagnostic
 
 
 @pytest.mark.hosted_langsmith

@@ -80,6 +80,23 @@ Identity 与 coverage 不能单独证明：
 是否合法。项目因此采用分层验收：自动结构门通过之后，仍明确要求人工 semantic support
 与直接可用性审阅。
 
+### 初稿修订不是失败 warning
+
+本地模型可能在初稿中遗漏某个段落、列表项或表格数据行的 `[S#]`。主 Agent 的 system prompt
+直接使用与 coverage 校验相同的 block 规则；若初稿仍不合格，运行时最多额外调用模型一次，
+要求它不增加事实，只使用已成功读取的 source ID 重写答案。
+
+修订后的答案仍会经过完整的 identity 与 coverage 校验。若它通过，这次内部恢复不会进入
+`ResearchReport.warnings`，Streamlit 也不应把成功恢复显示成“研究过程中出现警告”。若修订
+后仍缺少引用、引用未读来源或覆盖不完整，最终报告继续 fail closed 并给出对应校验原因；若
+中文问题修订后仍返回非中文，才保留明确的语言 warning。静默的是已经恢复的中间步骤，不是
+最终验证失败。
+
+同一语义也适用于不需要模型调用的确定性恢复：常见的 `S1` / `[ S1 ]` 会规范为 `[S1]`，模型
+生成的 Markdown link destination 会在正文进入报告前移除。只要清洗后的答案通过最终契约，
+这些动作不产生用户 warning；若清洗导致答案不再有可见引用或暴露其他契约失败，最终校验仍
+会给出失败原因并拒绝报告。
+
 ## 人工 semantic support 的最小检查
 
 对每个有实质内容的陈述：
@@ -97,4 +114,5 @@ Identity 与 coverage 不能单独证明：
 - [`evaluation.py`](../../src/agent_learn/evaluation.py)：固定 case 的指定页面 identity 检查。
 - [`quality-gate.md`](../quality-gate.md)：自动结构门与人工 semantic support rubric。
 - [`test_domain.py`](../../tests/unit/test_domain.py)：段落、列表、表格和结构性豁免的确定性用例。
+- [`test_adapters.py`](../../tests/unit/test_adapters.py)：首轮提示、单次修订与成功修订静默语义。
 - [`test_research.py`](../../tests/unit/test_research.py)：虚构、未读和覆盖不完整引用的失败路径。

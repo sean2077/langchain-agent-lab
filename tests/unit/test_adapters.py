@@ -441,6 +441,35 @@ def test_agent_backend_sets_explicit_graph_execution_limits(
     assert observed_configs == [{"recursion_limit": 100, "max_concurrency": 1}]
 
 
+def test_agent_backend_initial_prompt_matches_grounding_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_system_prompts: list[str] = []
+
+    class FakeAgent:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            return {"messages": [AIMessage(content="Short answer")]}
+
+    def fake_create_agent(**kwargs: object) -> FakeAgent:
+        observed_system_prompts.append(str(kwargs["system_prompt"]))
+        return FakeAgent()
+
+    monkeypatch.setattr("agent_learn.adapters.create_agent", fake_create_agent)
+    backend = LangChainAgentBackend(object())  # type: ignore[arg-type]
+    tools = ResearchTools(OneResultSearch(), SuccessfulReader(), url_validator=lambda url: url)
+
+    backend.answer("What is the API?", tools)
+
+    assert len(observed_system_prompts) == 1
+    normalized_prompt = " ".join(observed_system_prompts[0].split())
+    assert "Every prose paragraph, list item, and Markdown table data row" in normalized_prompt
+    assert "chosen only from sources you successfully read" in normalized_prompt
+
+
 @pytest.mark.parametrize(
     "draft",
     [
@@ -485,7 +514,7 @@ def test_agent_backend_repairs_incomplete_citation_coverage_once(
     assert len(agent_invocations) == 1
     assert len(model_invocations) == 1
     assert "chosen only from: [S1]" in str(model_invocations[0])
-    assert any("grounding-format repair pass" in warning for warning in tools.warnings)
+    assert tools.warnings == []
 
 
 def test_agent_backend_repairs_language_for_chinese_question(
@@ -518,6 +547,35 @@ def test_agent_backend_repairs_language_for_chinese_question(
     assert answer == "中文答案。[S1]"
     assert len(model_invocations) == 1
     assert "Write the revised answer in Chinese" in str(model_invocations[0])
+    assert tools.warnings == []
+
+
+def test_agent_backend_warns_when_language_repair_still_mismatches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tools = ResearchTools(OneResultSearch(), SuccessfulReader(), url_validator=lambda url: url)
+    tools.search_web("official docs")
+    tools.read_source("S1")
+
+    class FakeAgent:
+        def invoke(
+            self,
+            payload: dict[str, object],
+            config: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            return {"messages": [AIMessage(content="English draft [S1]")]}
+
+    class FakeModel:
+        def invoke(self, messages: object) -> AIMessage:
+            return AIMessage(content="Still English [S1]")
+
+    monkeypatch.setattr("agent_learn.adapters.create_agent", lambda **_kwargs: FakeAgent())
+    backend = LangChainAgentBackend(FakeModel())  # type: ignore[arg-type]
+
+    answer = backend.answer("这个 API 是什么？", tools)
+
+    assert answer == "Still English [S1]"
+    assert tools.warnings == ["agent answer remained non-Chinese after one repair pass"]
 
 
 def test_normal_agent_and_repair_override_globally_enabled_tracing(

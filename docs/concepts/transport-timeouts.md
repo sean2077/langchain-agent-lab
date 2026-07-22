@@ -88,6 +88,17 @@ tool call，它们仍只占工具节点所在的一个 super-step，所以 recur
 正文字符数和最多三次重定向等边界。Fake-IP 公共 DNS 查询使用另一个 5 秒 timeout。这些限制
 属于不同外部调用，`OLLAMA_TIMEOUT_SECONDS` 不会覆盖它们。
 
+DoH client 与页面 reader 都显式设置 `trust_env=False`。系统 DNS 返回 Fake-IP 时，公网地址
+再验证和随后固定 IP 的页面连接因此走同一条直连/TUN 网络边界，不会让 DoH 单独继承 shell
+里的 HTTP(S) proxy。该设置不提供绕过网络策略的 fallback：若环境只允许显式 proxy、禁止
+直连公网，公共 DNS 再验证会失败，reader 仍按安全契约 fail closed。
+
+A 与 AAAA 各自最多尝试两次，每次仍使用独立的 5 秒 HTTPX timeout。一种地址族在两次尝试后
+仍不可用时，只要另一种地址族已经返回至少一个地址，resolver 就用成功集合继续公网属性验证；
+两种地址族都没有可用答案才把解析判为失败。这个策略处理单次握手超时和单地址族故障，但不
+缓存 DNS、不跳过公网 IP 检查，也不是一个统一的 20 秒硬 deadline；最坏情况下两族各两次都
+可能分别消耗 timeout。
+
 30 秒是本项目的 reader 构造参数默认值，不是 HTTPX 标准值或生产延迟结论。一次 `read()`
 只建立一个单调时钟 deadline，所有已验证公网地址和后续重定向都共享它。发起每个新 HTTPX
 请求前，reader 计算：
@@ -141,6 +152,7 @@ attempt timeout = min(10 秒 transport timeout, 连接尝试剩余预算)
 - [`adapters.py`](../../src/agent_learn/adapters.py)：主 Agent graph step/concurrency limit，以及
   页面读取器的独立 timeout、重定向和大小边界。
 - [`security.py`](../../src/agent_learn/security.py)：Fake-IP 公共 DNS 查询的独立 timeout。
+- [`test_security.py`](../../tests/unit/test_security.py)：Fake-IP 再解析和 DoH 不继承 proxy 的契约。
 - [`test_adapters.py`](../../tests/unit/test_adapters.py)：共享预算、地址回退和重定向的确定性验证。
 - [`test_config.py`](../../tests/unit/test_config.py)：拒绝零、负数、无穷和非数字配置。
 - [`test_bootstrap.py`](../../tests/unit/test_bootstrap.py)：验证模型 transport 收到配置值且不继承 proxy。

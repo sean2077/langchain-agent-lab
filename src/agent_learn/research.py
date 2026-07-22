@@ -52,17 +52,9 @@ class ResearchService:
                 ResearchOutcome.AGENT_ERROR,
             )
 
-        answer, removed_link_count = remove_markdown_link_targets(answer)
-        answer, normalized_citation_count = normalize_citation_markers(answer)
+        answer, _ = remove_markdown_link_targets(answer)
+        answer, _ = normalize_citation_markers(answer)
         report_warnings = [bounded_warning(warning) for warning in tools.warnings]
-        if normalized_citation_count:
-            report_warnings.append(
-                f"normalized {normalized_citation_count} citation marker(s) to [S#]"
-            )
-        if removed_link_count:
-            report_warnings.append(
-                f"removed {removed_link_count} Markdown link target(s) from model response"
-            )
 
         if not tools.registered_source_ids:
             return self._failed_report(

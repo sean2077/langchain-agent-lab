@@ -39,8 +39,10 @@ Rules:
    for comparison or independent context.
 2. Use web_search before making factual claims, then use read_source for every id
    that you cite. Never cite a source that read_source could not fetch.
-3. Cite every material factual claim using the exact compact form [S1]. Never write
-   bare S1, [ S1 ], or any other citation syntax.
+3. Every prose paragraph, list item, and Markdown table data row must contain at
+   least one exact compact source marker such as [S1], chosen only from sources you
+   successfully read. Headings, separators, and fenced code blocks do not need a
+   marker. Never write bare S1, [ S1 ], or any other citation syntax.
 4. Never invent a source id, URL, quotation, or fact not supported by tool output.
 5. If evidence is missing or a tool fails, say what could not be verified.
 6. Answer in the same language as the user's question.
@@ -306,7 +308,8 @@ class LangChainAgentBackend(AgentBackend):
                     ]
                 )
                 answer = _message_text(revised_message)
-                tools.warnings.append("agent answer required one grounding-format repair pass")
+                if _chinese_language_mismatch(question, answer):
+                    tools.warnings.append("agent answer remained non-Chinese after one repair pass")
 
         return answer
 

@@ -94,6 +94,13 @@ class ReadsWithoutCitingBackend(AgentBackend):
         return "LangChain v1 uses create_agent."
 
 
+class LooseCitationBackend(AgentBackend):
+    def answer(self, question: str, tools: ResearchTools) -> str:
+        tools.search_web("LangChain v1")
+        tools.read_source("S1")
+        return "LangChain v1 uses create_agent S1。"
+
+
 class LinkedBackend(AgentBackend):
     def answer(self, question: str, tools: ResearchTools) -> str:
         tools.search_web("LangChain v1")
@@ -304,7 +311,7 @@ def test_research_service_removes_model_generated_link_targets() -> None:
 
     assert report.answer_markdown == "旧功能迁移至 langchain-classic [S1]"
     assert "file://" not in report.answer_markdown
-    assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
+    assert report.warnings == []
 
 
 def test_research_service_removes_model_generated_gfm_autolink() -> None:
@@ -316,7 +323,19 @@ def test_research_service_removes_model_generated_gfm_autolink() -> None:
 
     assert report.answer_markdown == "Read  for details. [S1]"
     assert "attacker.example" not in report.answer_markdown
-    assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
+    assert report.warnings == []
+
+
+def test_research_service_silently_normalizes_recoverable_citation_format() -> None:
+    service = ResearchService(
+        FakeSearch(), FakeReader(), LooseCitationBackend(), url_validator=lambda url: url
+    )
+
+    report = service.research(ResearchRequest(question="LangChain 是什么？"))
+
+    assert report.answer_markdown == "LangChain v1 uses create_agent [S1]。"
+    assert report.is_source_grounded
+    assert report.warnings == []
 
 
 def test_research_service_fails_closed_on_citation_hidden_in_reference_definition() -> None:
@@ -331,7 +350,6 @@ def test_research_service_fails_closed_on_citation_hidden_in_reference_definitio
 
     assert report.cited_source_ids == []
     assert report.outcome is ResearchOutcome.INSUFFICIENT_EVIDENCE
-    assert any("removed 1 Markdown link target" in warning for warning in report.warnings)
     assert any("no source citations" in warning for warning in report.warnings)
 
 

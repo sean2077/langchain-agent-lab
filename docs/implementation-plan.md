@@ -39,3 +39,11 @@
 - **Test seam:** opt-in live tests against real local/external services
 - **Verification:** `uv run --extra dev pytest -q` and `uv run --extra dev pytest -m live -q`
 - **Result/Evidence:** Ollama 0.32.1 + `qwen3.5:9b`; final suite `61 passed, 1 skipped`; 5 non-hosted live boundaries passed; 5/5 quality cases returned grounded reports from successfully read sources; hosted LangSmith case is deterministically covered but live execution was skipped because `LANGSMITH_API_KEY` is not configured. This is historical 2026-07-18 structural evidence, not a current regression result or proof of semantic support; the reproducible workflow now lives in `agent-learn-eval` and `docs/quality-gate.md`.
+
+### Slice `grounding-recovery` — recovered drafts stay quiet and Fake-IP DNS tolerates transient loss
+- **Status:** done
+- **Blocked by:** live-boundaries
+- **Touches:** initial grounding prompt, one-pass repair diagnostics, deterministic answer cleanup, Fake-IP DoH transport/retry policy, live failure diagnostics, contract/concept docs
+- **Test seam:** fake model drafts and repair responses; mocked DoH proxy configuration, transient failure, single-family success and bounded fail-closed cases; real local model and public pages
+- **Verification:** `uv run --extra dev pytest -m "not live" -q`; `uv run --extra dev pytest -m "live and not hosted_langsmith" -q`; `uv run --extra dev ruff check .`; `uv run --extra dev ruff format --check .`; `uv lock --check`
+- **Result/Evidence:** on 2026-07-22, deterministic suite `217 passed, 10 deselected`; non-hosted live suite `9 passed, 218 deselected`; the LangChain official page was read successfully three consecutive times after the DoH change. `agent-learn "LangChain v1 是什么？"` exited 0 without warnings, and `agent-learn --json "量子AI是什么"` returned `source_grounded` with an empty warning list. Hosted LangSmith was not run. These are runtime and structural results only; the Quantum AI report's mixed source quality still requires human semantic review.

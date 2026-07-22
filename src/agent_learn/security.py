@@ -16,6 +16,7 @@ PublicDnsResolver = Callable[[str], Sequence[str]]
 
 _FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
 _PUBLIC_DNS_ENDPOINT = "https://dns.google/resolve"
+_PUBLIC_DNS_ATTEMPTS_PER_RECORD = 2
 
 
 class UnsafeUrlError(ValueError):
@@ -86,29 +87,35 @@ def resolve_public_dns(hostname: str) -> tuple[str, ...]:
     """
 
     addresses: list[str] = []
-    try:
-        with httpx.Client(timeout=5.0, follow_redirects=True) as client:
-            for record_type, type_number in (("A", 1), ("AAAA", 28)):
-                response = client.get(
-                    _PUBLIC_DNS_ENDPOINT,
-                    params={"name": hostname, "type": record_type},
-                    headers={"Accept": "application/dns-json"},
-                )
-                response.raise_for_status()
-                if len(response.content) > 64_000:
-                    raise UnsafeUrlError("public DNS response is too large")
-                payload = response.json()
-                if payload.get("Status") != 0:
-                    continue
-                addresses.extend(
-                    str(answer["data"])
-                    for answer in payload.get("Answer", [])
-                    if answer.get("type") == type_number and answer.get("data")
-                )
-    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
-        raise UnsafeUrlError(f"public DNS lookup failed for hostname: {hostname}") from exc
+    lookup_errors: list[Exception] = []
+    with httpx.Client(timeout=5.0, follow_redirects=True, trust_env=False) as client:
+        for record_type, type_number in (("A", 1), ("AAAA", 28)):
+            for _attempt in range(_PUBLIC_DNS_ATTEMPTS_PER_RECORD):
+                try:
+                    response = client.get(
+                        _PUBLIC_DNS_ENDPOINT,
+                        params={"name": hostname, "type": record_type},
+                        headers={"Accept": "application/dns-json"},
+                    )
+                    response.raise_for_status()
+                    if len(response.content) > 64_000:
+                        raise UnsafeUrlError("public DNS response is too large")
+                    payload = response.json()
+                    if payload.get("Status") == 0:
+                        addresses.extend(
+                            str(answer["data"])
+                            for answer in payload.get("Answer", [])
+                            if answer.get("type") == type_number and answer.get("data")
+                        )
+                    break
+                except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+                    lookup_errors.append(exc)
 
     unique_addresses = tuple(dict.fromkeys(addresses))
+    if not unique_addresses and lookup_errors:
+        raise UnsafeUrlError(
+            f"public DNS lookup failed for hostname: {hostname}"
+        ) from lookup_errors[-1]
     if not unique_addresses:
         raise UnsafeUrlError(f"hostname could not be resolved by public DNS: {hostname}")
     return unique_addresses
